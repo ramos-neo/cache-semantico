@@ -7,7 +7,7 @@ Content-Type: application/json
   "message": "Tenho dúvidas sobre cobrança, pode me ajudar?"
 }
 
-### Segunda chamada igual: deve chamar IA novamente
+### Segunda chamada igual: deve retornar exact_cache
 
 POST http://localhost:8000/tickets/analyze
 Content-Type: application/json
@@ -16,29 +16,11 @@ Content-Type: application/json
   "message": "Tenho dúvidas sobre cobrança, pode me ajudar?"
 }
 
-### Mensagem de cancelamento
+### Mesma intenção com espaços e maiúsculas: exact_cache por causa da normalização
 
 POST http://localhost:8000/tickets/analyze
 Content-Type: application/json
 
 {
-  "message": "Quero cancelar meu plano"
-}
-
-### Mensagem de suporte técnico
-
-POST http://localhost:8000/tickets/analyze
-Content-Type: application/json
-
-{
-  "message": "Meu aplicativo está travando ao abrir"
-}
-
-### Mensagem de conta
-
-POST http://localhost:8000/tickets/analyze
-Content-Type: application/json
-
-{
-  "message": "Não consigo acessar minha conta"
+  "message": "  tenho   DÚVIDAS sobre cobrança, pode me ajudar?  "
 }
