@@ -1,101 +1,13 @@
-### Primeira chamada: deve chamar IA
+# Demonstração do /tickets/analyze do zero.
+# Pré-requisitos: banco vazio (docker compose up -d) e servidor recém-subido
+# (python main.py). Rode os blocos de cima para baixo, na ordem.
+#
+# A cada requisição, observe o campo "source":
+#   ai_model       -> não tinha cache; chamou a IA e salvou no pgvector.
+#   exact_cache     -> mesma mensagem de antes; respondeu da memória.
+#   semantic_cache  -> mensagem parecida; respondeu do pgvector, sem IA.
 
-POST http://localhost:8000/tickets/analyze
-Content-Type: application/json
-
-{
-  "message": "Tenho dúvidas sobre cobrança, pode me ajudar?"
-}
-
-### Segunda chamada igual: deve retornar exact_cache
-
-POST http://localhost:8000/tickets/analyze
-Content-Type: application/json
-
-{
-  "message": "Tenho dúvidas sobre cobrança, pode me ajudar?"
-}
-
-### Configuração atual (inclui embedding e banco)
-
-GET http://localhost:8000/config
-
-### Status do banco
-
-GET http://localhost:8000/db/status
-
-### Criar item manual de cache semântico
-
-POST http://localhost:8000/semantic-cache/items
-Content-Type: application/json
-
-{
-  "input_text": "Como cancelo minha assinatura?",
-  "response_json": {
-    "category": "cancellation",
-    "confidence": 0.92,
-    "reason": "O usuário quer cancelar a assinatura."
-  }
-}
-
-### Criar outro item manual
-
-POST http://localhost:8000/semantic-cache/items
-Content-Type: application/json
-
-{
-  "input_text": "Quero cancelar meu plano",
-  "response_json": {
-    "category": "cancellation",
-    "confidence": 0.9,
-    "reason": "O usuário demonstrou intenção de cancelar o plano."
-  }
-}
-
-### Buscar similares no cache semântico
-
-POST http://localhost:8000/semantic-cache/search
-Content-Type: application/json
-
-{
-  "input_text": "Preciso cancelar meu plano",
-  "limit": 5
-}
-
-### Avaliar candidato bom
-
-POST http://localhost:8000/semantic-cache/evaluate
-Content-Type: application/json
-
-{
-  "input_text": "Preciso cancelar meu plano",
-  "threshold": 0.9,
-  "limit": 5
-}
-
-### Avaliar caso potencialmente perigoso: com threshold alto, deve ser rejected
-
-POST http://localhost:8000/semantic-cache/evaluate
-Content-Type: application/json
-
-{
-  "input_text": "Quero cancelar minha reunião de amanhã",
-  "threshold": 0.9,
-  "limit": 5
-}
-
-### Mesmo texto com threshold baixo: falso positivo (accepted por engano)
-
-POST http://localhost:8000/semantic-cache/evaluate
-Content-Type: application/json
-
-{
-  "input_text": "Quero cancelar minha reunião de amanhã",
-  "threshold": 0.6,
-  "limit": 5
-}
-
-### Garantir threshold padrão
+### 0. Garante o threshold padrão do cache semântico
 
 PUT http://localhost:8000/config
 Content-Type: application/json
@@ -104,7 +16,25 @@ Content-Type: application/json
   "semantic_cache_threshold": 0.9
 }
 
-### Deve tentar semantic_cache antes de chamar IA
+### 1. Primeira mensagem: sem cache -> chama a IA e salva no pgvector (source=ai_model)
+
+POST http://localhost:8000/tickets/analyze
+Content-Type: application/json
+
+{
+  "message": "Quero cancelar meu plano"
+}
+
+### 2. Mesma mensagem: cache exato em memória (source=exact_cache)
+
+POST http://localhost:8000/tickets/analyze
+Content-Type: application/json
+
+{
+  "message": "Quero cancelar meu plano"
+}
+
+### 3. Mensagem parecida: cache semântico, sem chamar a IA (source=semantic_cache)
 
 POST http://localhost:8000/tickets/analyze
 Content-Type: application/json
@@ -113,20 +43,11 @@ Content-Type: application/json
   "message": "Preciso cancelar meu plano"
 }
 
-### Aumentar threshold para forçar semantic miss
-
-PUT http://localhost:8000/config
-Content-Type: application/json
-
-{
-  "semantic_cache_threshold": 0.99
-}
-
-### Com threshold alto, deve chamar IA se não passar no corte
+### 4. Mensagem diferente: sem candidato bom -> chama a IA e salva (source=ai_model)
 
 POST http://localhost:8000/tickets/analyze
 Content-Type: application/json
 
 {
-  "message": "Preciso cancelar meu plano"
+  "message": "Meu aplicativo está travando ao abrir"
 }

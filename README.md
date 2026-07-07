@@ -5,22 +5,28 @@ pgvector para cache semântico.
 
 ## Cache no /tickets/analyze
 
-Agora o `/tickets/analyze` tenta o cache **antes** de chamar a IA, nesta ordem:
+Agora o `/tickets/analyze` tenta o cache **antes** de chamar a IA e, no fim, **grava**
+o novo resultado. A ordem é:
 
 1. **Cache exato** (fingerprint em memória) → `source: exact_cache`.
 2. Se não houver, **cache semântico**: gera o embedding, busca no pgvector e avalia o
    melhor candidato contra o `semantic_cache_threshold`. Se passar no corte →
    `source: semantic_cache` (usa o `response_json` salvo, **sem** chamar a IA).
 3. Se não houver candidato aceito → chama a IA → `source: ai_model`.
+4. **Gravação no cache semântico**: no caminho da IA (e só nele), a resposta é salva no
+   pgvector reaproveitando o embedding já gerado no passo 2 — assim uma próxima
+   mensagem parecida pode ser resolvida por `semantic_cache`.
 
-A resposta traz um bloco `semantic_cache` com `attempted`, `hit`, `decision`, `reason`,
-`threshold` e dados do `best_match`. O `semantic_cache_threshold` é ajustável em runtime
-pelo `PUT /config` (0 < t ≤ 1) — subir o corte gera mais misses, baixar aceita mais (e
-arrisca falso positivo).
+A resposta traz `semantic_cache` (avaliação: `decision`, `threshold`, `best_match`…) e
+`semantic_cache_write` (gravação: `attempted`, `saved`, `reason`, `item_id`,
+`embedding_dimension`). A gravação **só acontece quando a IA é chamada**: em exact hit e
+semantic hit nada novo é gravado. Se a gravação falhar, a resposta da IA é retornada
+mesmo assim (`saved: false`, erro no log).
 
-Ainda **não** há gravação automática no pgvector após a IA: por enquanto o cache
-semântico só é **populado** manualmente via `POST /semantic-cache/items`. Essa gravação
-automática é o próximo passo.
+O `semantic_cache_threshold` é ajustável em runtime pelo `PUT /config` (0 < t ≤ 1) —
+subir o corte gera mais misses, baixar aceita mais (e arrisca falso positivo). Ainda
+**não** há política avançada do que pode ou não ser cacheado (confiança mínima, dados
+sensíveis): por ora toda resposta de IA vira item do cache semântico.
 
 ## Organização do código
 

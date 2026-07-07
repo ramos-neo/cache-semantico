@@ -44,12 +44,21 @@ class SemanticCacheInfo(BaseModel):
     best_match_input_text: Optional[str] = None
 
 
+class SemanticCacheWriteInfo(BaseModel):
+    attempted: bool
+    saved: bool
+    reason: str
+    item_id: Optional[str] = None
+    embedding_dimension: Optional[int] = None
+
+
 class TicketResponse(BaseModel):
     source: str
     ai_call_number: int
     elapsed_ms: int
     cache: CacheInfo
     semantic_cache: SemanticCacheInfo
+    semantic_cache_write: SemanticCacheWriteInfo
     result: TicketAnalysis
 
 

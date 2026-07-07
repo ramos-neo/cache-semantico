@@ -39,6 +39,7 @@ from models import (
     SemanticCacheEvaluateResponse,
     SemanticCacheEvaluation,
     SemanticCacheInfo,
+    SemanticCacheWriteInfo,
 )
 from db import (
     init_db,
@@ -167,20 +168,30 @@ def analyze_ticket(request: TicketRequest) -> TicketResponse:
         cached = TicketAnalysis(**CACHE[key])
         log_block(
             "✅ EXACT CACHE HIT (IA não chamada)",
-            {"source": "exact_cache", "normalized_text": fingerprint["normalized_text"], "ai_called": False},
+            {
+                "source": "exact_cache",
+                "semantic_cache": "skipped",
+                "semantic_cache_write": "skipped",
+                "ai_called": False,
+            },
         )
         return TicketResponse(
             source="exact_cache",
             ai_call_number=ai_call_count,
             elapsed_ms=int((time.perf_counter() - start) * 1000),
             cache=CacheInfo(hit=True, key=key, fingerprint=Fingerprint(**fingerprint)),
-            # Cache exato resolveu, então o cache semântico nem foi avaliado.
+            # Cache exato resolveu: nem avalia nem grava no cache semântico.
             semantic_cache=SemanticCacheInfo(
                 attempted=False,
                 hit=False,
                 decision="skipped",
                 reason="Exact cache hit. Semantic cache was not evaluated.",
                 threshold=threshold,
+            ),
+            semantic_cache_write=SemanticCacheWriteInfo(
+                attempted=False,
+                saved=False,
+                reason="Exact cache hit. No semantic cache write needed.",
             ),
             result=cached,
         )
@@ -190,8 +201,10 @@ def analyze_ticket(request: TicketRequest) -> TicketResponse:
 
     # --- Passo 2: cache semântico (pgvector + threshold) -----------------------
     # Gera o embedding da mensagem, busca os candidatos mais próximos e avalia o
-    # melhor deles contra o threshold. Retorna decision = accepted / rejected.
-    evaluation = evaluate_semantic_cache_for_text(fingerprint, threshold)
+    # melhor deles contra o threshold. Guardamos o embedding para reaproveitar na
+    # gravação (Passo 3), evitando gerar o mesmo embedding duas vezes.
+    embedding, items = search_candidates(fingerprint, 5)
+    evaluation = evaluate_best_match(items, threshold)
     best = evaluation["best_match"]
 
     # Só há hit semântico se o candidato foi aceito E o response_json salvo é válido.
@@ -223,7 +236,7 @@ def analyze_ticket(request: TicketRequest) -> TicketResponse:
             "✅ SEMANTIC CACHE HIT (IA não chamada)",
             {
                 "source": "semantic_cache",
-                "normalized_text": fingerprint["normalized_text"],
+                "semantic_cache_write": "skipped",
                 "best_similarity": round(best.similarity, 4),
                 "threshold": threshold,
                 "ai_called": False,
@@ -235,23 +248,34 @@ def analyze_ticket(request: TicketRequest) -> TicketResponse:
             elapsed_ms=int((time.perf_counter() - start) * 1000),
             cache=cache_info,
             semantic_cache=semantic_cache,
+            # Hit semântico reutiliza um item que já existe: nada novo é gravado.
+            semantic_cache_write=SemanticCacheWriteInfo(
+                attempted=False,
+                saved=False,
+                reason="Semantic cache hit. No new item was created.",
+            ),
             result=semantic_result,
         )
 
-    # --- Passo 3: nenhum cache serviu, chama a IA ------------------------------
-    # Chama o modelo, incrementa o contador e salva no cache exato para a próxima
-    # mensagem idêntica. (A gravação no cache semântico virá na próxima prática.)
+    # --- Passo 3: nenhum cache serviu, chama a IA e grava o resultado ----------
+    # Chama o modelo, incrementa o contador e salva no cache exato (em memória) e
+    # no cache semântico (pgvector), reaproveitando o embedding do Passo 2 — assim
+    # uma próxima mensagem parecida pode ser resolvida por semantic_cache.
     result = chain.invoke({"message": request.message})
     ai_call_count += 1
     CACHE[key] = result.model_dump()
+
+    semantic_cache_write = save_ai_result_to_semantic_cache(
+        fingerprint, request.message, result, embedding
+    )
 
     log_block(
         "❌ CACHE MISS — IA chamada",
         {
             "semantic_cache": evaluation["decision"],
-            "best_similarity": round(best.similarity, 4) if best else "-",
-            "threshold": threshold,
             "calling_ai": True,
+            "semantic_cache_write": "saved" if semantic_cache_write.saved else "failed",
+            "item_id": semantic_cache_write.item_id or "-",
             "AI calls": ai_call_count,
             "Categoria": result.category,
         },
@@ -262,6 +286,7 @@ def analyze_ticket(request: TicketRequest) -> TicketResponse:
         elapsed_ms=int((time.perf_counter() - start) * 1000),
         cache=cache_info,
         semantic_cache=semantic_cache,
+        semantic_cache_write=semantic_cache_write,
         result=result,
     )
 
@@ -417,9 +442,36 @@ def evaluate_best_match(items: list, threshold: float) -> dict:
     return {"decision": decision, "reason": reason, "best_match": best_match}
 
 
-def evaluate_semantic_cache_for_text(fingerprint: dict, threshold: float, limit: int = 5):
-    _, items = search_candidates(fingerprint, limit)
-    return evaluate_best_match(items, threshold)
+def save_ai_result_to_semantic_cache(
+    fingerprint: dict,
+    input_text: str,
+    result: TicketAnalysis,
+    embedding: list[float],
+) -> SemanticCacheWriteInfo:
+    dimension = len(embedding)
+    try:
+        item_id = insert_semantic_cache_item(
+            **fingerprint,
+            input_text=input_text,
+            response_json=result.model_dump(),
+            embedding=embedding,
+        )
+        return SemanticCacheWriteInfo(
+            attempted=True,
+            saved=True,
+            reason="AI response saved to semantic cache after semantic miss.",
+            item_id=item_id,
+            embedding_dimension=dimension,
+        )
+    except Exception as error:
+        log_block("❌ Falha ao gravar no cache semântico", {"error": str(error)})
+        return SemanticCacheWriteInfo(
+            attempted=True,
+            saved=False,
+            reason="AI response returned, but semantic cache write failed.",
+            item_id=None,
+            embedding_dimension=dimension,
+        )
 
 
 @app.post("/semantic-cache/search", response_model=SemanticCacheSearchResponse)
