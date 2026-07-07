@@ -1,9 +1,16 @@
-# Analisador de Tickets — Cache com fingerprint
+# Analisador de Tickets — Embeddings de textos
 
 Analisador de tickets de suporte usando IA com LangChain e FastAPI.
 
-Esta versão evolui o cache exato: a chave deixa de depender só da mensagem e passa a
-ser um **fingerprint** do contexto que gerou a resposta.
+Esta versão adiciona **geração de embeddings** e reorganiza o código em poucos
+arquivos, porque o `main.py` começou a crescer.
+
+## Organização do código
+
+- `main.py` — app FastAPI, endpoints e fluxo das requisições (chat e embeddings).
+- `models.py` — modelos Pydantic (request/response de tickets, config e embeddings).
+- `config.py` — carrega o `.env`, expõe as configs e cria os modelos LangChain.
+- `log_helpers.py` — helper de log em bloco, para não poluir o `main.py`.
 
 ## Como rodar
 
@@ -15,81 +22,60 @@ cp .env.example .env
 python main.py
 ```
 
-Preencha `OPENAI_API_KEY` no arquivo `.env`. O modelo padrão é `gpt-4.1-mini`
-(configurável via `OPENAI_MODEL`).
-
-A API sobe em `http://localhost:8000`.
+Preencha `OPENAI_API_KEY` no `.env`. Modelos configuráveis via `OPENAI_MODEL` e
+`OPENAI_EMBEDDING_MODEL`. A API sobe em `http://localhost:8000`.
 
 ## Endpoints
 
 ```http
-POST /tickets/analyze   # classifica um ticket (com cache)
-GET  /config            # mostra a configuração runtime atual
-PUT  /config            # altera prompt_version / rules_version / model_capability
+POST /tickets/analyze      # classifica um ticket (com cache + fingerprint)
+GET  /config               # config runtime + embedding_model
+PUT  /config               # altera prompt/rules/model_capability em runtime
+POST /embeddings/generate  # gera embeddings de uma lista de textos
 ```
 
-Entrada do `/tickets/analyze`:
+Entrada do `/embeddings/generate`:
 
 ```json
 {
-  "message": "Tenho dúvidas sobre cobrança, pode me ajudar?"
+  "texts": [
+    "Como cancelo minha assinatura?",
+    "Quero cancelar meu plano",
+    "Não consigo acessar minha conta"
+  ]
 }
 ```
 
-Saída (cache miss — IA chamada):
+Saída (um item por texto):
 
 ```json
 {
-  "source": "ai_model",
-  "ai_call_number": 1,
-  "elapsed_ms": 1234,
-  "cache": {
-    "hit": false,
-    "key": "...",
-    "fingerprint": {
-      "prompt_version": "prompt_v1",
-      "rules_version": "rules_v1",
-      "model_capability": "fast_model",
-      "normalized_text": "tenho dúvidas sobre cobrança, pode me ajudar?"
+  "model": "text-embedding-3-small",
+  "items": [
+    {
+      "text": "Como cancelo minha assinatura?",
+      "normalized_text": "como cancelo minha assinatura?",
+      "embedding_dimension": 1536,
+      "embedding_preview": [0.0123, -0.0456, 0.0789, 0.0012, -0.0345]
     }
-  },
-  "result": {
-    "category": "billing",
-    "confidence": 0.9,
-    "reason": "O usuário mencionou dúvidas sobre cobrança."
-  }
+  ]
 }
 ```
 
-Categorias possíveis: `billing`, `technical_support`, `account`, `cancellation`, `other`.
+## Sobre embeddings
 
-## Fingerprint
-
-- **Fingerprint** é o conjunto de fatores que definem a resposta. A chave de cache é o
-  SHA-256 desse fingerprint serializado de forma estável (`json.dumps(sort_keys=True)`).
-- A chave **não depende mais só da mensagem**: a mesma pergunta com outro prompt ou
-  outra versão de regras é outra resposta, logo outra chave.
-- Campos do fingerprint: `prompt_version`, `rules_version`, `model_capability` e
-  `normalized_text`.
-- `PUT /config` altera essas versões **em runtime**, sem reiniciar o servidor — o que
-  permite demonstrar a mudança de fingerprint sem perder o cache já em memória (que
-  sumiria num restart).
-- O cache continua **em memória** e some quando o servidor reinicia.
-- `ai_call_number` só aumenta quando a IA é realmente chamada (cache miss).
+- **Embedding não é resposta de chat.** O retorno é um **vetor numérico** que
+  representa o significado do texto.
+- A dimensão vem de `len(embedding)` (não é hardcoded) — no `text-embedding-3-small`
+  são 1536 números.
+- A API mostra apenas um **preview** (5 primeiros números); o vetor completo não é
+  retornado nem salvo.
+- **Ainda não há similaridade nem pgvector.** Esta etapa só gera e observa o vetor. A
+  comparação por similaridade e o cache semântico vêm nas próximas práticas — o
+  embedding gerado aqui é a matéria-prima para armazenar no pgvector depois.
 
 ## Como testar
 
-Use o `test.http`:
-
-1. Primeira chamada → `ai_model` (miss).
-2. Mesma mensagem → `exact_cache` (hit), mesmo `ai_call_number`.
-3. `PUT /config` mudando `prompt_version` para `prompt_v2`.
-4. Mesma mensagem → `ai_model` (miss): o fingerprint mudou, a chave é outra.
-5. `PUT /config` voltando para `prompt_v1`.
-6. Mesma mensagem → `exact_cache` (hit): a chave antiga ainda está em memória.
-
-## Próximo passo
-
-O cache ainda é **exato**: mensagens com a mesma intenção mas texto diferente geram
-chaves diferentes. Isso será resolvido com embeddings e **cache semântico** nas
-próximas práticas — ainda não há embedding, pgvector nem busca por similaridade aqui.
+Use o `test.http`: as duas primeiras chamadas mostram o cache (miss → hit), o
+`GET /config` mostra o `embedding_model`, e o `/embeddings/generate` retorna os
+vetores (dimensão + preview).

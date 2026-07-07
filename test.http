@@ -1,4 +1,4 @@
-### Primeira chamada com prompt_v1: deve chamar IA
+### Primeira chamada: deve chamar IA
 
 POST http://localhost:8000/tickets/analyze
 Content-Type: application/json
@@ -7,7 +7,7 @@ Content-Type: application/json
   "message": "Tenho dúvidas sobre cobrança, pode me ajudar?"
 }
 
-### Segunda chamada igual com prompt_v1: deve retornar exact_cache
+### Segunda chamada igual: deve retornar exact_cache
 
 POST http://localhost:8000/tickets/analyze
 Content-Type: application/json
@@ -16,38 +16,19 @@ Content-Type: application/json
   "message": "Tenho dúvidas sobre cobrança, pode me ajudar?"
 }
 
-### Mudar prompt_version em runtime para prompt_v2
+### Configuração atual (inclui embedding_model)
 
-PUT http://localhost:8000/config
+GET http://localhost:8000/config
+
+### Gerar embeddings de textos
+
+POST http://localhost:8000/embeddings/generate
 Content-Type: application/json
 
 {
-  "prompt_version": "prompt_v2"
-}
-
-### Mesma mensagem com prompt_v2: deve gerar cache miss
-
-POST http://localhost:8000/tickets/analyze
-Content-Type: application/json
-
-{
-  "message": "Tenho dúvidas sobre cobrança, pode me ajudar?"
-}
-
-### Voltar prompt_version para prompt_v1
-
-PUT http://localhost:8000/config
-Content-Type: application/json
-
-{
-  "prompt_version": "prompt_v1"
-}
-
-### Mesma mensagem com prompt_v1: deve voltar a dar exact_cache
-
-POST http://localhost:8000/tickets/analyze
-Content-Type: application/json
-
-{
-  "message": "Tenho dúvidas sobre cobrança, pode me ajudar?"
+  "texts": [
+    "Como cancelo minha assinatura?",
+    "Quero cancelar meu plano",
+    "Não consigo acessar minha conta"
+  ]
 }

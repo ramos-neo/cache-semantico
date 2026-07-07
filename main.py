@@ -1,72 +1,30 @@
-import os
 import re
 import json
 import time
 import hashlib
-import logging
-from typing import Literal, Optional
 
-from dotenv import load_dotenv
-from fastapi import FastAPI
-from pydantic import BaseModel
-from langchain.chat_models import init_chat_model
+from fastapi import FastAPI, HTTPException
 from langchain_core.prompts import ChatPromptTemplate
 
-load_dotenv()
-
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-logger = logging.getLogger("tickets")
-
-MODEL_NAME = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
-
-runtime_config = {
-    "prompt_version": os.getenv("PROMPT_VERSION", "prompt_v1"),
-    "rules_version": os.getenv("RULES_VERSION", "rules_v1"),
-    "model_capability": os.getenv("MODEL_CAPABILITY", "fast_model"),
-}
-
-
-class TicketAnalysis(BaseModel):
-    category: Literal[
-        "billing",
-        "technical_support",
-        "account",
-        "cancellation",
-        "other",
-    ]
-    confidence: float
-    reason: str
-
-
-class TicketRequest(BaseModel):
-    message: str
-
-
-class Fingerprint(BaseModel):
-    prompt_version: str
-    rules_version: str
-    model_capability: str
-    normalized_text: str
-
-
-class CacheInfo(BaseModel):
-    hit: bool
-    key: str
-    fingerprint: Fingerprint
-
-
-class TicketResponse(BaseModel):
-    source: str
-    ai_call_number: int
-    elapsed_ms: int
-    cache: CacheInfo
-    result: TicketAnalysis
-
-
-class ConfigUpdate(BaseModel):
-    prompt_version: Optional[str] = None
-    rules_version: Optional[str] = None
-    model_capability: Optional[str] = None
+from config import (
+    OPENAI_EMBEDDING_MODEL,
+    runtime_config,
+    create_chat_model,
+    create_embedding_model,
+)
+from log_helpers import log_block
+from models import (
+    TicketRequest,
+    TicketAnalysis,
+    TicketResponse,
+    CacheInfo,
+    Fingerprint,
+    ConfigUpdate,
+    ConfigResponse,
+    EmbeddingsRequest,
+    EmbeddingItem,
+    EmbeddingsResponse,
+)
 
 
 def normalize_text(text: str) -> str:
@@ -87,18 +45,6 @@ def build_cache_key(fingerprint: dict) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-SEPARATOR = "─" * 64
-
-
-def log_block(title: str, fields: dict[str, object]) -> None:
-    lines = [SEPARATOR, title, SEPARATOR]
-    width = max(len(k) for k in fields)
-    for label, value in fields.items():
-        lines.append(f"  {label:<{width}} : {value}")
-    lines.append(SEPARATOR)
-    logger.info("\n" + "\n".join(lines) + "\n")
-
-
 prompt = ChatPromptTemplate.from_messages(
     [
         (
@@ -113,8 +59,8 @@ prompt = ChatPromptTemplate.from_messages(
     ]
 )
 
-llm = init_chat_model(MODEL_NAME, model_provider="openai", temperature=0)
-chain = prompt | llm.with_structured_output(TicketAnalysis)
+chain = prompt | create_chat_model().with_structured_output(TicketAnalysis)
+embeddings_model = create_embedding_model()
 
 ai_call_count = 0
 CACHE: dict[str, dict] = {}
@@ -122,13 +68,13 @@ CACHE: dict[str, dict] = {}
 app = FastAPI()
 
 
-@app.get("/config")
-def get_config() -> dict:
-    return runtime_config
+@app.get("/config", response_model=ConfigResponse)
+def get_config() -> ConfigResponse:
+    return ConfigResponse(**runtime_config, embedding_model=OPENAI_EMBEDDING_MODEL)
 
 
-@app.put("/config")
-def update_config(update: ConfigUpdate) -> dict:
+@app.put("/config", response_model=ConfigResponse)
+def update_config(update: ConfigUpdate) -> ConfigResponse:
     for field, value in update.model_dump(exclude_none=True).items():
         runtime_config[field] = value
 
@@ -140,7 +86,7 @@ def update_config(update: ConfigUpdate) -> dict:
             "Model capability": runtime_config["model_capability"],
         },
     )
-    return runtime_config
+    return ConfigResponse(**runtime_config, embedding_model=OPENAI_EMBEDDING_MODEL)
 
 
 @app.post("/tickets/analyze", response_model=TicketResponse)
@@ -204,6 +150,43 @@ def analyze_ticket(request: TicketRequest) -> TicketResponse:
         cache=CacheInfo(hit=False, key=key, fingerprint=Fingerprint(**fingerprint)),
         result=result,
     )
+
+
+@app.post("/embeddings/generate", response_model=EmbeddingsResponse)
+def generate_embeddings(request: EmbeddingsRequest) -> EmbeddingsResponse:
+    if not request.texts:
+        raise HTTPException(status_code=400, detail="A lista de textos não pode estar vazia.")
+
+    normalized_texts = [normalize_text(t) for t in request.texts]
+    if any(not n for n in normalized_texts):
+        raise HTTPException(
+            status_code=400, detail="Cada texto precisa ter conteúdo após a normalização."
+        )
+
+    start = time.perf_counter()
+    vectors = embeddings_model.embed_documents(normalized_texts)
+    elapsed_ms = int((time.perf_counter() - start) * 1000)
+
+    items = [
+        EmbeddingItem(
+            text=text,
+            normalized_text=normalized,
+            embedding_dimension=len(vector),
+            embedding_preview=vector[:5],
+        )
+        for text, normalized, vector in zip(request.texts, normalized_texts, vectors)
+    ]
+
+    log_block(
+        "🔢 Embeddings gerados",
+        {
+            "model": OPENAI_EMBEDDING_MODEL,
+            "texts_count": len(items),
+            "dimension": items[0].embedding_dimension if items else 0,
+            "elapsed_ms": f"{elapsed_ms}ms",
+        },
+    )
+    return EmbeddingsResponse(model=OPENAI_EMBEDDING_MODEL, items=items)
 
 
 if __name__ == "__main__":
