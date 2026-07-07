@@ -1,10 +1,9 @@
-# Analisador de Tickets — Cache exato (cache-aside)
+# Analisador de Tickets — Cache com fingerprint
 
 Analisador de tickets de suporte usando IA com LangChain e FastAPI.
 
-Esta versão adiciona **cache exato em memória** com o padrão **cache-aside**: a
-aplicação procura no cache antes de chamar a IA. Se encontrar, retorna o resultado
-cacheado; se não, chama o modelo e guarda o resultado para as próximas vezes.
+Esta versão evolui o cache exato: a chave deixa de depender só da mensagem e passa a
+ser um **fingerprint** do contexto que gerou a resposta.
 
 ## Como rodar
 
@@ -21,13 +20,15 @@ Preencha `OPENAI_API_KEY` no arquivo `.env`. O modelo padrão é `gpt-4.1-mini`
 
 A API sobe em `http://localhost:8000`.
 
-## Endpoint
+## Endpoints
 
 ```http
-POST /tickets/analyze
+POST /tickets/analyze   # classifica um ticket (com cache)
+GET  /config            # mostra a configuração runtime atual
+PUT  /config            # altera prompt_version / rules_version / model_capability
 ```
 
-Entrada:
+Entrada do `/tickets/analyze`:
 
 ```json
 {
@@ -45,7 +46,12 @@ Saída (cache miss — IA chamada):
   "cache": {
     "hit": false,
     "key": "...",
-    "normalized_text": "tenho dúvidas sobre cobrança, pode me ajudar?"
+    "fingerprint": {
+      "prompt_version": "prompt_v1",
+      "rules_version": "rules_v1",
+      "model_capability": "fast_model",
+      "normalized_text": "tenho dúvidas sobre cobrança, pode me ajudar?"
+    }
   },
   "result": {
     "category": "billing",
@@ -57,30 +63,33 @@ Saída (cache miss — IA chamada):
 
 Categorias possíveis: `billing`, `technical_support`, `account`, `cancellation`, `other`.
 
-## Cache exato
+## Fingerprint
 
-- **Cache exato** aqui significa: mesma mensagem (após normalização) → mesma chave →
-  mesma resposta, sem chamar a IA de novo. A chave é o SHA-256 do texto normalizado
-  (sem espaços extras e em minúsculas).
-- O cache é **em memória** (um dicionário). Ele **desaparece quando o servidor
-  reinicia**.
-- `source = ai_model`: a IA foi chamada (cache miss).
-- `source = exact_cache`: a resposta veio do cache (cache hit).
-- `ai_call_number` **não aumenta** quando há cache hit — só cresce quando a IA é
-  realmente chamada.
+- **Fingerprint** é o conjunto de fatores que definem a resposta. A chave de cache é o
+  SHA-256 desse fingerprint serializado de forma estável (`json.dumps(sort_keys=True)`).
+- A chave **não depende mais só da mensagem**: a mesma pergunta com outro prompt ou
+  outra versão de regras é outra resposta, logo outra chave.
+- Campos do fingerprint: `prompt_version`, `rules_version`, `model_capability` e
+  `normalized_text`.
+- `PUT /config` altera essas versões **em runtime**, sem reiniciar o servidor — o que
+  permite demonstrar a mudança de fingerprint sem perder o cache já em memória (que
+  sumiria num restart).
+- O cache continua **em memória** e some quando o servidor reinicia.
+- `ai_call_number` só aumenta quando a IA é realmente chamada (cache miss).
 
 ## Como testar
 
-Use o arquivo `test.http` (VS Code REST Client ou similar):
+Use o `test.http`:
 
-1. Primeira chamada → `source: ai_model`, `cache.hit: false`.
-2. Segunda chamada igual → `source: exact_cache`, `cache.hit: true`, mesmo
-   `ai_call_number`.
-3. Mesma mensagem com espaços e maiúsculas → ainda é `exact_cache`, graças à
-   normalização.
+1. Primeira chamada → `ai_model` (miss).
+2. Mesma mensagem → `exact_cache` (hit), mesmo `ai_call_number`.
+3. `PUT /config` mudando `prompt_version` para `prompt_v2`.
+4. Mesma mensagem → `ai_model` (miss): o fingerprint mudou, a chave é outra.
+5. `PUT /config` voltando para `prompt_v1`.
+6. Mesma mensagem → `exact_cache` (hit): a chave antiga ainda está em memória.
 
-## Limitação e próximo passo
+## Próximo passo
 
-O cache é **exato**: qualquer diferença que a normalização não trate (uma palavra a
-mais, sinônimo, pontuação diferente) gera uma chave nova e chama a IA. Na próxima
-prática isso evolui com **fingerprint**.
+O cache ainda é **exato**: mensagens com a mesma intenção mas texto diferente geram
+chaves diferentes. Isso será resolvido com embeddings e **cache semântico** nas
+próximas práticas — ainda não há embedding, pgvector nem busca por similaridade aqui.
