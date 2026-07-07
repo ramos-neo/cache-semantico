@@ -1,4 +1,4 @@
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -51,6 +51,35 @@ class ConfigResponse(BaseModel):
     rules_version: str
     model_capability: str
     embedding_model: str
+    embedding_dimensions: int
+    database_configured: bool
+
+
+class DatabaseStatusResponse(BaseModel):
+    connected: bool
+    pgvector_enabled: bool
+    embedding_dimensions: int
+    table: Optional[str] = None
+    error: Optional[str] = None
+
+
+class SemanticCacheCreateRequest(BaseModel):
+    input_text: str
+    response_json: dict[str, Any]
+
+
+class SemanticCacheCreateResponse(BaseModel):
+    id: str
+    prompt_version: str
+    rules_version: str
+    model_capability: str
+    input_text: str
+    normalized_text: str
+    embedding_model: str
+    embedding_dimension: int
+    embedding_preview: list[float]
+    response_json: dict[str, Any]
+    created: bool
 
 
 class EmbeddingsRequest(BaseModel):

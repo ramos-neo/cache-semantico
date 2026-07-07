@@ -2,12 +2,15 @@ import re
 import json
 import time
 import hashlib
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from langchain_core.prompts import ChatPromptTemplate
 
 from config import (
     OPENAI_EMBEDDING_MODEL,
+    OPENAI_EMBEDDING_DIMENSIONS,
+    DATABASE_URL,
     runtime_config,
     create_chat_model,
     create_embedding_model,
@@ -24,7 +27,11 @@ from models import (
     EmbeddingsRequest,
     EmbeddingItem,
     EmbeddingsResponse,
+    DatabaseStatusResponse,
+    SemanticCacheCreateRequest,
+    SemanticCacheCreateResponse,
 )
+from db import init_db, get_db_status, insert_semantic_cache_item
 
 
 def normalize_text(text: str) -> str:
@@ -65,12 +72,37 @@ embeddings_model = create_embedding_model()
 ai_call_count = 0
 CACHE: dict[str, dict] = {}
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        init_db()
+    except Exception as error:
+        log_block(
+            "❌ Falha ao inicializar o banco",
+            {
+                "erro": error,
+                "dica": "O Postgres está no ar? Rode: docker compose up -d",
+            },
+        )
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
+
+
+def config_response() -> ConfigResponse:
+    return ConfigResponse(
+        **runtime_config,
+        embedding_model=OPENAI_EMBEDDING_MODEL,
+        embedding_dimensions=OPENAI_EMBEDDING_DIMENSIONS,
+        database_configured=bool(DATABASE_URL),
+    )
 
 
 @app.get("/config", response_model=ConfigResponse)
 def get_config() -> ConfigResponse:
-    return ConfigResponse(**runtime_config, embedding_model=OPENAI_EMBEDDING_MODEL)
+    return config_response()
 
 
 @app.put("/config", response_model=ConfigResponse)
@@ -86,7 +118,12 @@ def update_config(update: ConfigUpdate) -> ConfigResponse:
             "Model capability": runtime_config["model_capability"],
         },
     )
-    return ConfigResponse(**runtime_config, embedding_model=OPENAI_EMBEDDING_MODEL)
+    return config_response()
+
+
+@app.get("/db/status", response_model=DatabaseStatusResponse)
+def db_status() -> DatabaseStatusResponse:
+    return DatabaseStatusResponse(**get_db_status())
 
 
 @app.post("/tickets/analyze", response_model=TicketResponse)
@@ -187,6 +224,48 @@ def generate_embeddings(request: EmbeddingsRequest) -> EmbeddingsResponse:
         },
     )
     return EmbeddingsResponse(model=OPENAI_EMBEDDING_MODEL, items=items)
+
+
+@app.post("/semantic-cache/items", response_model=SemanticCacheCreateResponse)
+def create_semantic_cache_item(
+    request: SemanticCacheCreateRequest,
+) -> SemanticCacheCreateResponse:
+    fingerprint = build_fingerprint(request.input_text)
+    if not fingerprint["normalized_text"]:
+        raise HTTPException(
+            status_code=400, detail="input_text precisa ter conteúdo após a normalização."
+        )
+
+    embedding = embeddings_model.embed_query(fingerprint["normalized_text"])
+    dimension = len(embedding)
+
+    item_id = insert_semantic_cache_item(
+        **fingerprint,
+        input_text=request.input_text,
+        response_json=request.response_json,
+        embedding=embedding,
+    )
+
+    log_block(
+        "💾 Item de cache semântico criado",
+        {
+            "id": item_id,
+            "input_text": request.input_text,
+            "normalized_text": fingerprint["normalized_text"],
+            "embedding_dimension": dimension,
+            "created": True,
+        },
+    )
+    return SemanticCacheCreateResponse(
+        **fingerprint,
+        id=item_id,
+        input_text=request.input_text,
+        embedding_model=OPENAI_EMBEDDING_MODEL,
+        embedding_dimension=dimension,
+        embedding_preview=embedding[:5],
+        response_json=request.response_json,
+        created=True,
+    )
 
 
 if __name__ == "__main__":

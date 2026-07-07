@@ -1,18 +1,30 @@
-# Analisador de Tickets — Embeddings de textos
+# Analisador de Tickets — pgvector e persistência de embeddings
 
 Analisador de tickets de suporte usando IA com LangChain e FastAPI.
 
-Esta versão adiciona **geração de embeddings** e reorganiza o código em poucos
-arquivos, porque o `main.py` começou a crescer.
+Esta versão adiciona **Postgres com pgvector** e passa a **salvar embeddings no
+banco**. Antes o embedding era só gerado e devolvido pela API; agora ele vira dado
+persistido, para ser consultado nas próximas práticas.
 
 ## Organização do código
 
-- `main.py` — app FastAPI, endpoints e fluxo das requisições (chat e embeddings).
-- `models.py` — modelos Pydantic (request/response de tickets, config e embeddings).
-- `config.py` — carrega o `.env`, expõe as configs e cria os modelos LangChain.
-- `log_helpers.py` — helper de log em bloco, para não poluir o `main.py`.
+- `main.py` — app FastAPI, endpoints e fluxo (chama funções do `db.py`).
+- `db.py` — conexão, extensão `vector`, tabela, índice e inserção (SQL fica aqui).
+- `models.py` — modelos Pydantic.
+- `config.py` — `.env`, configs e fábricas de modelo LangChain.
+- `log_helpers.py` — log em bloco.
 
-## Como rodar
+## Subir o banco (Docker)
+
+```bash
+docker compose up -d
+```
+
+Isso sobe um Postgres com pgvector (imagem `pgvector/pgvector:pg16`).
+
+Para parar: `docker compose down`. Para apagar os dados: `docker compose down -v`.
+
+## Rodar a aplicação
 
 ```bash
 python -m venv .venv
@@ -22,60 +34,38 @@ cp .env.example .env
 python main.py
 ```
 
-Preencha `OPENAI_API_KEY` no `.env`. Modelos configuráveis via `OPENAI_MODEL` e
-`OPENAI_EMBEDDING_MODEL`. A API sobe em `http://localhost:8000`.
+Preencha `OPENAI_API_KEY` no `.env`. No startup, a aplicação habilita a extensão
+`vector`, cria a tabela `ai_response_cache` e o índice de fingerprint. Se o Postgres
+não estiver no ar, o erro aparece claro no terminal.
 
-## Endpoints
+## Endpoints novos
 
 ```http
-POST /tickets/analyze      # classifica um ticket (com cache + fingerprint)
-GET  /config               # config runtime + embedding_model
-PUT  /config               # altera prompt/rules/model_capability em runtime
-POST /embeddings/generate  # gera embeddings de uma lista de textos
+GET  /db/status              # valida conexão, pgvector e existência da tabela
+POST /semantic-cache/items   # gera embedding e salva um item no Postgres
 ```
 
-Entrada do `/embeddings/generate`:
+Entrada do `/semantic-cache/items`:
 
 ```json
 {
-  "texts": [
-    "Como cancelo minha assinatura?",
-    "Quero cancelar meu plano",
-    "Não consigo acessar minha conta"
-  ]
+  "input_text": "Como cancelo minha assinatura?",
+  "response_json": {
+    "category": "cancellation",
+    "confidence": 0.92,
+    "reason": "O usuário quer cancelar a assinatura."
+  }
 }
 ```
 
-Saída (um item por texto):
+A resposta traz os dados do item e apenas um `embedding_preview` (5 números). O vetor
+completo **não** é retornado — ele fica salvo na coluna `embedding VECTOR(1536)`.
 
-```json
-{
-  "model": "text-embedding-3-small",
-  "items": [
-    {
-      "text": "Como cancelo minha assinatura?",
-      "normalized_text": "como cancelo minha assinatura?",
-      "embedding_dimension": 1536,
-      "embedding_preview": [0.0123, -0.0456, 0.0789, 0.0012, -0.0345]
-    }
-  ]
-}
-```
+## O que esta etapa ainda NÃO faz
 
-## Sobre embeddings
+- **Não há busca por similaridade** (sem operador `<=>`, sem threshold).
+- **Não há cache semântico no `/tickets/analyze`** — ele continua igual, com cache
+  exato + fingerprint em memória.
 
-- **Embedding não é resposta de chat.** O retorno é um **vetor numérico** que
-  representa o significado do texto.
-- A dimensão vem de `len(embedding)` (não é hardcoded) — no `text-embedding-3-small`
-  são 1536 números.
-- A API mostra apenas um **preview** (5 primeiros números); o vetor completo não é
-  retornado nem salvo.
-- **Ainda não há similaridade nem pgvector.** Esta etapa só gera e observa o vetor. A
-  comparação por similaridade e o cache semântico vêm nas próximas práticas — o
-  embedding gerado aqui é a matéria-prima para armazenar no pgvector depois.
-
-## Como testar
-
-Use o `test.http`: as duas primeiras chamadas mostram o cache (miss → hit), o
-`GET /config` mostra o `embedding_model`, e o `/embeddings/generate` retorna os
-vetores (dimensão + preview).
+Aqui só preparamos a infraestrutura: gerar o embedding e **persistir** no pgvector. A
+busca por similaridade vem na próxima prática, consultando exatamente esses vetores.

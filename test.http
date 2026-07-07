@@ -16,19 +16,38 @@ Content-Type: application/json
   "message": "Tenho dúvidas sobre cobrança, pode me ajudar?"
 }
 
-### Configuração atual (inclui embedding_model)
+### Configuração atual (inclui embedding e banco)
 
 GET http://localhost:8000/config
 
-### Gerar embeddings de textos
+### Status do banco
 
-POST http://localhost:8000/embeddings/generate
+GET http://localhost:8000/db/status
+
+### Criar item manual de cache semântico
+
+POST http://localhost:8000/semantic-cache/items
 Content-Type: application/json
 
 {
-  "texts": [
-    "Como cancelo minha assinatura?",
-    "Quero cancelar meu plano",
-    "Não consigo acessar minha conta"
-  ]
+  "input_text": "Como cancelo minha assinatura?",
+  "response_json": {
+    "category": "cancellation",
+    "confidence": 0.92,
+    "reason": "O usuário quer cancelar a assinatura."
+  }
+}
+
+### Criar outro item manual
+
+POST http://localhost:8000/semantic-cache/items
+Content-Type: application/json
+
+{
+  "input_text": "Quero cancelar meu plano",
+  "response_json": {
+    "category": "cancellation",
+    "confidence": 0.9,
+    "reason": "O usuário demonstrou intenção de cancelar o plano."
+  }
 }

@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ai-cache-postgres
+    environment:
+      POSTGRES_DB: ai_cache
+      POSTGRES_USER: ai_cache
+      POSTGRES_PASSWORD: ai_cache
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - ai_cache_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  ai_cache_postgres_data:

@@ -8,10 +8,15 @@ load_dotenv()
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
 OPENAI_EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+OPENAI_EMBEDDING_DIMENSIONS = int(os.getenv("OPENAI_EMBEDDING_DIMENSIONS", "1536"))
 MODEL_TEMPERATURE = float(os.getenv("MODEL_TEMPERATURE", "0"))
 PROMPT_VERSION = os.getenv("PROMPT_VERSION", "prompt_v1")
 RULES_VERSION = os.getenv("RULES_VERSION", "rules_v1")
 MODEL_CAPABILITY = os.getenv("MODEL_CAPABILITY", "fast_model")
+
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", "postgresql://ai_cache:ai_cache@localhost:5432/ai_cache"
+)
 
 runtime_config = {
     "prompt_version": PROMPT_VERSION,
