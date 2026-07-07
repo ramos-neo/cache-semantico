@@ -32,11 +32,24 @@ class CacheInfo(BaseModel):
     fingerprint: Fingerprint
 
 
+class SemanticCacheInfo(BaseModel):
+    attempted: bool
+    hit: bool
+    decision: str
+    reason: str
+    threshold: float
+    best_match_similarity: Optional[float] = None
+    best_match_distance: Optional[float] = None
+    best_match_id: Optional[str] = None
+    best_match_input_text: Optional[str] = None
+
+
 class TicketResponse(BaseModel):
     source: str
     ai_call_number: int
     elapsed_ms: int
     cache: CacheInfo
+    semantic_cache: SemanticCacheInfo
     result: TicketAnalysis
 
 
@@ -44,12 +57,14 @@ class ConfigUpdate(BaseModel):
     prompt_version: Optional[str] = None
     rules_version: Optional[str] = None
     model_capability: Optional[str] = None
+    semantic_cache_threshold: Optional[float] = None
 
 
 class ConfigResponse(BaseModel):
     prompt_version: str
     rules_version: str
     model_capability: str
+    semantic_cache_threshold: float
     embedding_model: str
     embedding_dimensions: int
     database_configured: bool

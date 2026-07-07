@@ -1,10 +1,26 @@
-# Analisador de Tickets — pgvector e persistência de embeddings
+# Analisador de Tickets — cache semântico no fluxo principal
 
-Analisador de tickets de suporte usando IA com LangChain e FastAPI.
+Analisador de tickets de suporte usando IA com LangChain e FastAPI, com Postgres +
+pgvector para cache semântico.
 
-Esta versão adiciona **Postgres com pgvector** e passa a **salvar embeddings no
-banco**. Antes o embedding era só gerado e devolvido pela API; agora ele vira dado
-persistido, para ser consultado nas próximas práticas.
+## Cache no /tickets/analyze
+
+Agora o `/tickets/analyze` tenta o cache **antes** de chamar a IA, nesta ordem:
+
+1. **Cache exato** (fingerprint em memória) → `source: exact_cache`.
+2. Se não houver, **cache semântico**: gera o embedding, busca no pgvector e avalia o
+   melhor candidato contra o `semantic_cache_threshold`. Se passar no corte →
+   `source: semantic_cache` (usa o `response_json` salvo, **sem** chamar a IA).
+3. Se não houver candidato aceito → chama a IA → `source: ai_model`.
+
+A resposta traz um bloco `semantic_cache` com `attempted`, `hit`, `decision`, `reason`,
+`threshold` e dados do `best_match`. O `semantic_cache_threshold` é ajustável em runtime
+pelo `PUT /config` (0 < t ≤ 1) — subir o corte gera mais misses, baixar aceita mais (e
+arrisca falso positivo).
+
+Ainda **não** há gravação automática no pgvector após a IA: por enquanto o cache
+semântico só é **populado** manualmente via `POST /semantic-cache/items`. Essa gravação
+automática é o próximo passo.
 
 ## Organização do código
 

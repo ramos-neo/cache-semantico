@@ -94,3 +94,39 @@ Content-Type: application/json
   "threshold": 0.6,
   "limit": 5
 }
+
+### Garantir threshold padrão
+
+PUT http://localhost:8000/config
+Content-Type: application/json
+
+{
+  "semantic_cache_threshold": 0.9
+}
+
+### Deve tentar semantic_cache antes de chamar IA
+
+POST http://localhost:8000/tickets/analyze
+Content-Type: application/json
+
+{
+  "message": "Preciso cancelar meu plano"
+}
+
+### Aumentar threshold para forçar semantic miss
+
+PUT http://localhost:8000/config
+Content-Type: application/json
+
+{
+  "semantic_cache_threshold": 0.99
+}
+
+### Com threshold alto, deve chamar IA se não passar no corte
+
+POST http://localhost:8000/tickets/analyze
+Content-Type: application/json
+
+{
+  "message": "Preciso cancelar meu plano"
+}

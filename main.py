@@ -38,6 +38,7 @@ from models import (
     SemanticCacheEvaluateRequest,
     SemanticCacheEvaluateResponse,
     SemanticCacheEvaluation,
+    SemanticCacheInfo,
 )
 from db import (
     init_db,
@@ -120,6 +121,12 @@ def get_config() -> ConfigResponse:
 
 @app.put("/config", response_model=ConfigResponse)
 def update_config(update: ConfigUpdate) -> ConfigResponse:
+    if update.semantic_cache_threshold is not None and not 0 < update.semantic_cache_threshold <= 1:
+        raise HTTPException(
+            status_code=400,
+            detail="semantic_cache_threshold precisa estar entre 0 (exclusivo) e 1.",
+        )
+
     for field, value in update.model_dump(exclude_none=True).items():
         runtime_config[field] = value
 
@@ -129,6 +136,7 @@ def update_config(update: ConfigUpdate) -> ConfigResponse:
             "Prompt version": runtime_config["prompt_version"],
             "Rules version": runtime_config["rules_version"],
             "Model capability": runtime_config["model_capability"],
+            "Semantic threshold": runtime_config["semantic_cache_threshold"],
         },
     )
     return config_response()
@@ -141,63 +149,119 @@ def db_status() -> DatabaseStatusResponse:
 
 @app.post("/tickets/analyze", response_model=TicketResponse)
 def analyze_ticket(request: TicketRequest) -> TicketResponse:
+    # Cascata de cache: tenta o mais barato/seguro primeiro e só chama a IA no fim.
+    #   1. Cache exato    -> mesma mensagem (fingerprint idêntico) já respondida.
+    #   2. Cache semântico -> mensagem parecida o bastante (>= threshold) no pgvector.
+    #   3. IA             -> nenhum cache serviu; chama o modelo e guarda o resultado.
     global ai_call_count
 
     fingerprint = build_fingerprint(request.message)
     key = build_cache_key(fingerprint)
-
+    threshold = runtime_config["semantic_cache_threshold"]
     start = time.perf_counter()
 
+    # --- Passo 1: cache exato (em memória) -------------------------------------
+    # Se o fingerprint já está no dicionário, devolvemos a resposta salva.
+    # Nem gera embedding, nem consulta o banco, nem chama a IA.
     if key in CACHE:
         cached = TicketAnalysis(**CACHE[key])
-        elapsed_ms = int((time.perf_counter() - start) * 1000)
         log_block(
-            "✅ CACHE HIT — resposta do cache (IA não chamada)",
-            {
-                "Ticket": request.message,
-                "Normalizado": fingerprint["normalized_text"],
-                "Prompt version": fingerprint["prompt_version"],
-                "Rules version": fingerprint["rules_version"],
-                "Model capability": fingerprint["model_capability"],
-                "Cache key": key[:16] + "…",
-                "AI calls": ai_call_count,
-                "Categoria": cached.category,
-                "Tempo": f"{elapsed_ms}ms",
-            },
+            "✅ EXACT CACHE HIT (IA não chamada)",
+            {"source": "exact_cache", "normalized_text": fingerprint["normalized_text"], "ai_called": False},
         )
         return TicketResponse(
             source="exact_cache",
             ai_call_number=ai_call_count,
-            elapsed_ms=elapsed_ms,
+            elapsed_ms=int((time.perf_counter() - start) * 1000),
             cache=CacheInfo(hit=True, key=key, fingerprint=Fingerprint(**fingerprint)),
+            # Cache exato resolveu, então o cache semântico nem foi avaliado.
+            semantic_cache=SemanticCacheInfo(
+                attempted=False,
+                hit=False,
+                decision="skipped",
+                reason="Exact cache hit. Semantic cache was not evaluated.",
+                threshold=threshold,
+            ),
             result=cached,
         )
 
-    result = chain.invoke({"message": request.message})
-    elapsed_ms = int((time.perf_counter() - start) * 1000)
+    # A partir daqui é sempre cache miss exato, então cache.hit = false nas respostas.
+    cache_info = CacheInfo(hit=False, key=key, fingerprint=Fingerprint(**fingerprint))
 
+    # --- Passo 2: cache semântico (pgvector + threshold) -----------------------
+    # Gera o embedding da mensagem, busca os candidatos mais próximos e avalia o
+    # melhor deles contra o threshold. Retorna decision = accepted / rejected.
+    evaluation = evaluate_semantic_cache_for_text(fingerprint, threshold)
+    best = evaluation["best_match"]
+
+    # Só há hit semântico se o candidato foi aceito E o response_json salvo é válido.
+    # Um item corrompido no banco não pode derrubar a API: tratamos como miss.
+    semantic_result = None
+    if evaluation["decision"] == "accepted":
+        try:
+            semantic_result = TicketAnalysis(**best.response_json)
+        except Exception:
+            evaluation["decision"] = "rejected"
+            evaluation["reason"] = "Best match response_json is invalid; treated as semantic miss."
+
+    # Bloco semantic_cache da resposta — igual no hit semântico e no caminho da IA.
+    semantic_cache = SemanticCacheInfo(
+        attempted=True,
+        hit=semantic_result is not None,
+        decision=evaluation["decision"],
+        reason=evaluation["reason"],
+        threshold=threshold,
+        best_match_similarity=best.similarity if best else None,
+        best_match_distance=best.distance if best else None,
+        best_match_id=best.id if best else None,
+        best_match_input_text=best.input_text if best else None,
+    )
+
+    # Candidato aceito e válido: reaproveita a resposta salva, sem chamar a IA.
+    if semantic_result is not None:
+        log_block(
+            "✅ SEMANTIC CACHE HIT (IA não chamada)",
+            {
+                "source": "semantic_cache",
+                "normalized_text": fingerprint["normalized_text"],
+                "best_similarity": round(best.similarity, 4),
+                "threshold": threshold,
+                "ai_called": False,
+            },
+        )
+        return TicketResponse(
+            source="semantic_cache",
+            ai_call_number=ai_call_count,
+            elapsed_ms=int((time.perf_counter() - start) * 1000),
+            cache=cache_info,
+            semantic_cache=semantic_cache,
+            result=semantic_result,
+        )
+
+    # --- Passo 3: nenhum cache serviu, chama a IA ------------------------------
+    # Chama o modelo, incrementa o contador e salva no cache exato para a próxima
+    # mensagem idêntica. (A gravação no cache semântico virá na próxima prática.)
+    result = chain.invoke({"message": request.message})
     ai_call_count += 1
     CACHE[key] = result.model_dump()
 
     log_block(
         "❌ CACHE MISS — IA chamada",
         {
-            "Ticket": request.message,
-            "Normalizado": fingerprint["normalized_text"],
-            "Prompt version": fingerprint["prompt_version"],
-            "Rules version": fingerprint["rules_version"],
-            "Model capability": fingerprint["model_capability"],
-            "Cache key": key[:16] + "…",
+            "semantic_cache": evaluation["decision"],
+            "best_similarity": round(best.similarity, 4) if best else "-",
+            "threshold": threshold,
+            "calling_ai": True,
             "AI calls": ai_call_count,
             "Categoria": result.category,
-            "Tempo": f"{elapsed_ms}ms",
         },
     )
     return TicketResponse(
         source="ai_model",
         ai_call_number=ai_call_count,
-        elapsed_ms=elapsed_ms,
-        cache=CacheInfo(hit=False, key=key, fingerprint=Fingerprint(**fingerprint)),
+        elapsed_ms=int((time.perf_counter() - start) * 1000),
+        cache=cache_info,
+        semantic_cache=semantic_cache,
         result=result,
     )
 
@@ -281,28 +345,8 @@ def create_semantic_cache_item(
     )
 
 
-def run_semantic_search(input_text: str, limit: int):
-    if limit < 1:
-        raise HTTPException(status_code=400, detail="limit precisa ser no mínimo 1.")
-    limit = min(limit, 10)
-
-    fingerprint = build_fingerprint(input_text)
-    if not fingerprint["normalized_text"]:
-        raise HTTPException(
-            status_code=400, detail="input_text precisa ter conteúdo após a normalização."
-        )
-
-    embedding = embeddings_model.embed_query(fingerprint["normalized_text"])
-
-    rows = search_similar_semantic_cache_items(
-        prompt_version=fingerprint["prompt_version"],
-        rules_version=fingerprint["rules_version"],
-        model_capability=fingerprint["model_capability"],
-        embedding=embedding,
-        limit=limit,
-    )
-
-    items = [
+def rows_to_items(rows: list) -> list:
+    return [
         SemanticCacheSearchItem(
             id=str(row["id"]),
             input_text=row["input_text"],
@@ -314,6 +358,32 @@ def run_semantic_search(input_text: str, limit: int):
         )
         for row in rows
     ]
+
+
+def search_candidates(fingerprint: dict, limit: int) -> list:
+    embedding = embeddings_model.embed_query(fingerprint["normalized_text"])
+    rows = search_similar_semantic_cache_items(
+        prompt_version=fingerprint["prompt_version"],
+        rules_version=fingerprint["rules_version"],
+        model_capability=fingerprint["model_capability"],
+        embedding=embedding,
+        limit=limit,
+    )
+    return embedding, rows_to_items(rows)
+
+
+def run_semantic_search(input_text: str, limit: int):
+    if limit < 1:
+        raise HTTPException(status_code=400, detail="limit precisa ser no mínimo 1.")
+    limit = min(limit, 10)
+
+    fingerprint = build_fingerprint(input_text)
+    if not fingerprint["normalized_text"]:
+        raise HTTPException(
+            status_code=400, detail="input_text precisa ter conteúdo após a normalização."
+        )
+
+    embedding, items = search_candidates(fingerprint, limit)
 
     query = SemanticCacheSearchQuery(
         input_text=input_text,
@@ -345,6 +415,11 @@ def evaluate_best_match(items: list, threshold: float) -> dict:
         reason = "Best match similarity is below threshold."
         decision = "rejected"
     return {"decision": decision, "reason": reason, "best_match": best_match}
+
+
+def evaluate_semantic_cache_for_text(fingerprint: dict, threshold: float, limit: int = 5):
+    _, items = search_candidates(fingerprint, limit)
+    return evaluate_best_match(items, threshold)
 
 
 @app.post("/semantic-cache/search", response_model=SemanticCacheSearchResponse)
