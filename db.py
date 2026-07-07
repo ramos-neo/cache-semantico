@@ -1,6 +1,7 @@
 import uuid
 
 import psycopg
+from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from config import DATABASE_URL, OPENAI_EMBEDDING_DIMENSIONS
@@ -108,3 +109,43 @@ def insert_semantic_cache_item(
         )
         conn.commit()
     return item_id
+
+
+def search_similar_semantic_cache_items(
+    prompt_version: str,
+    rules_version: str,
+    model_capability: str,
+    embedding: list[float],
+    limit: int,
+) -> list[dict]:
+    with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn, conn.cursor() as cur:
+        cur.execute(
+            f"""
+            WITH query_embedding AS (
+                SELECT %s::vector AS value
+            )
+            SELECT
+                c.id,
+                c.input_text,
+                c.normalized_text,
+                c.response_json,
+                c.created_at,
+                c.embedding <=> q.value AS distance,
+                1 - (c.embedding <=> q.value) AS similarity
+            FROM {TABLE_NAME} c
+            CROSS JOIN query_embedding q
+            WHERE c.prompt_version = %s
+              AND c.rules_version = %s
+              AND c.model_capability = %s
+            ORDER BY c.embedding <=> q.value
+            LIMIT %s
+            """,
+            (
+                to_pgvector(embedding),
+                prompt_version,
+                rules_version,
+                model_capability,
+                limit,
+            ),
+        )
+        return cur.fetchall()

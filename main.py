@@ -30,8 +30,18 @@ from models import (
     DatabaseStatusResponse,
     SemanticCacheCreateRequest,
     SemanticCacheCreateResponse,
+    SemanticCacheSearchRequest,
+    SemanticCacheSearchResponse,
+    SemanticCacheSearchQuery,
+    SemanticCacheSearchFilters,
+    SemanticCacheSearchItem,
 )
-from db import init_db, get_db_status, insert_semantic_cache_item
+from db import (
+    init_db,
+    get_db_status,
+    insert_semantic_cache_item,
+    search_similar_semantic_cache_items,
+)
 
 
 def normalize_text(text: str) -> str:
@@ -265,6 +275,70 @@ def create_semantic_cache_item(
         embedding_preview=embedding[:5],
         response_json=request.response_json,
         created=True,
+    )
+
+
+@app.post("/semantic-cache/search", response_model=SemanticCacheSearchResponse)
+def search_semantic_cache(
+    request: SemanticCacheSearchRequest,
+) -> SemanticCacheSearchResponse:
+    if request.limit < 1:
+        raise HTTPException(status_code=400, detail="limit precisa ser no mínimo 1.")
+    limit = min(request.limit, 10)
+
+    fingerprint = build_fingerprint(request.input_text)
+    if not fingerprint["normalized_text"]:
+        raise HTTPException(
+            status_code=400, detail="input_text precisa ter conteúdo após a normalização."
+        )
+
+    embedding = embeddings_model.embed_query(fingerprint["normalized_text"])
+
+    rows = search_similar_semantic_cache_items(
+        prompt_version=fingerprint["prompt_version"],
+        rules_version=fingerprint["rules_version"],
+        model_capability=fingerprint["model_capability"],
+        embedding=embedding,
+        limit=limit,
+    )
+
+    items = [
+        SemanticCacheSearchItem(
+            id=str(row["id"]),
+            input_text=row["input_text"],
+            normalized_text=row["normalized_text"],
+            distance=row["distance"],
+            similarity=row["similarity"],
+            response_json=row["response_json"],
+            created_at=row["created_at"].isoformat(),
+        )
+        for row in rows
+    ]
+
+    log_block(
+        "🔎 Busca semântica",
+        {
+            "input_text": request.input_text,
+            "normalized_text": fingerprint["normalized_text"],
+            "limit": limit,
+            "results": len(items),
+            "best_similarity": round(items[0].similarity, 4) if items else "-",
+        },
+    )
+    return SemanticCacheSearchResponse(
+        query=SemanticCacheSearchQuery(
+            input_text=request.input_text,
+            normalized_text=fingerprint["normalized_text"],
+            embedding_model=OPENAI_EMBEDDING_MODEL,
+            embedding_dimension=len(embedding),
+        ),
+        filters=SemanticCacheSearchFilters(
+            prompt_version=fingerprint["prompt_version"],
+            rules_version=fingerprint["rules_version"],
+            model_capability=fingerprint["model_capability"],
+        ),
+        count=len(items),
+        items=items,
     )
 
 

@@ -96,3 +96,38 @@ class EmbeddingItem(BaseModel):
 class EmbeddingsResponse(BaseModel):
     model: str
     items: list[EmbeddingItem]
+
+
+class SemanticCacheSearchRequest(BaseModel):
+    input_text: str
+    limit: int = 5
+
+
+class SemanticCacheSearchQuery(BaseModel):
+    input_text: str
+    normalized_text: str
+    embedding_model: str
+    embedding_dimension: int
+
+
+class SemanticCacheSearchFilters(BaseModel):
+    prompt_version: str
+    rules_version: str
+    model_capability: str
+
+
+class SemanticCacheSearchItem(BaseModel):
+    id: str
+    input_text: str
+    normalized_text: str
+    distance: float
+    similarity: float
+    response_json: dict[str, Any]
+    created_at: str
+
+
+class SemanticCacheSearchResponse(BaseModel):
+    query: SemanticCacheSearchQuery
+    filters: SemanticCacheSearchFilters
+    count: int
+    items: list[SemanticCacheSearchItem]

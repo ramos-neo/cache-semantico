@@ -51,3 +51,13 @@ Content-Type: application/json
     "reason": "O usuário demonstrou intenção de cancelar o plano."
   }
 }
+
+### Buscar similares no cache semântico
+
+POST http://localhost:8000/semantic-cache/search
+Content-Type: application/json
+
+{
+  "input_text": "Preciso cancelar meu plano",
+  "limit": 5
+}

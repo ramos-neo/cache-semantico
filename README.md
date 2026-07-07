@@ -61,11 +61,24 @@ Entrada do `/semantic-cache/items`:
 A resposta traz os dados do item e apenas um `embedding_preview` (5 números). O vetor
 completo **não** é retornado — ele fica salvo na coluna `embedding VECTOR(1536)`.
 
-## O que esta etapa ainda NÃO faz
+## Busca por similaridade
 
-- **Não há busca por similaridade** (sem operador `<=>`, sem threshold).
-- **Não há cache semântico no `/tickets/analyze`** — ele continua igual, com cache
-  exato + fingerprint em memória.
+```http
+POST /semantic-cache/search
+```
 
-Aqui só preparamos a infraestrutura: gerar o embedding e **persistir** no pgvector. A
-busca por similaridade vem na próxima prática, consultando exatamente esses vetores.
+Agora dá para **buscar respostas parecidas** no pgvector. O endpoint recebe um texto
+novo, normaliza, gera o embedding com LangChain e compara com os embeddings **já
+salvos** usando o operador de distância `<=>` do pgvector, filtrando pelo fingerprint
+atual (`prompt_version`, `rules_version`, `model_capability`).
+
+```json
+{ "input_text": "Preciso cancelar meu plano", "limit": 5 }
+```
+
+Cada item retorna `distance` (quanto menor, mais próximo) e `similarity` (`1 -
+distance`, só para leitura didática). `limit` é opcional (padrão 5, máximo 10).
+
+Os resultados são apenas **candidatos**: esta etapa **não** aplica threshold, **não**
+decide cache hit e **não** altera o `/tickets/analyze`. Essa decisão vem na próxima
+prática, usando um limiar de similaridade sobre esses candidatos.
