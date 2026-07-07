@@ -61,3 +61,36 @@ Content-Type: application/json
   "input_text": "Preciso cancelar meu plano",
   "limit": 5
 }
+
+### Avaliar candidato bom
+
+POST http://localhost:8000/semantic-cache/evaluate
+Content-Type: application/json
+
+{
+  "input_text": "Preciso cancelar meu plano",
+  "threshold": 0.9,
+  "limit": 5
+}
+
+### Avaliar caso potencialmente perigoso: com threshold alto, deve ser rejected
+
+POST http://localhost:8000/semantic-cache/evaluate
+Content-Type: application/json
+
+{
+  "input_text": "Quero cancelar minha reunião de amanhã",
+  "threshold": 0.9,
+  "limit": 5
+}
+
+### Mesmo texto com threshold baixo: falso positivo (accepted por engano)
+
+POST http://localhost:8000/semantic-cache/evaluate
+Content-Type: application/json
+
+{
+  "input_text": "Quero cancelar minha reunião de amanhã",
+  "threshold": 0.6,
+  "limit": 5
+}

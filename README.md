@@ -79,6 +79,30 @@ atual (`prompt_version`, `rules_version`, `model_capability`).
 Cada item retorna `distance` (quanto menor, mais próximo) e `similarity` (`1 -
 distance`, só para leitura didática). `limit` é opcional (padrão 5, máximo 10).
 
-Os resultados são apenas **candidatos**: esta etapa **não** aplica threshold, **não**
-decide cache hit e **não** altera o `/tickets/analyze`. Essa decisão vem na próxima
-prática, usando um limiar de similaridade sobre esses candidatos.
+Os resultados são apenas **candidatos**: a busca só encontra parecidos, não decide se
+podem ser reutilizados.
+
+## Avaliação com threshold
+
+```http
+POST /semantic-cache/evaluate
+```
+
+O **threshold** é o corte mínimo de similaridade para aceitar o melhor candidato. O
+endpoint busca os candidatos, pega o mais próximo (`best_match`) e compara com o
+threshold:
+
+```json
+{ "input_text": "Preciso cancelar meu plano", "threshold": 0.9, "limit": 5 }
+```
+
+- `decision: accepted` — `best_match.similarity >= threshold`.
+- `decision: rejected` — similaridade abaixo do threshold, ou nenhum candidato.
+
+O ajuste do threshold é um trade-off: **baixo** demais aceita **falso positivo**
+(reutiliza uma resposta que só parece próxima — ex.: "cancelar meu plano" vs "cancelar
+minha reunião"); **alto** demais gera mais **misses** (chama a IA à toa). Por isso
+*parecido não significa automaticamente reutilizável*.
+
+Esta etapa ainda **não** integra ao `/tickets/analyze` e **não** chama o modelo nem
+grava no banco — só demonstra a decisão. A integração no fluxo principal vem depois.

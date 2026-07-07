@@ -131,3 +131,25 @@ class SemanticCacheSearchResponse(BaseModel):
     filters: SemanticCacheSearchFilters
     count: int
     items: list[SemanticCacheSearchItem]
+
+
+class SemanticCacheEvaluateRequest(BaseModel):
+    input_text: str
+    threshold: float = 0.9
+    limit: int = 5
+
+
+class SemanticCacheEvaluation(BaseModel):
+    threshold: float
+    decision: Literal["accepted", "rejected"]
+    reason: str
+    best_match_similarity: Optional[float] = None
+    best_match_distance: Optional[float] = None
+
+
+class SemanticCacheEvaluateResponse(BaseModel):
+    query: SemanticCacheSearchQuery
+    filters: SemanticCacheSearchFilters
+    evaluation: SemanticCacheEvaluation
+    best_match: Optional[SemanticCacheSearchItem] = None
+    candidates: list[SemanticCacheSearchItem]

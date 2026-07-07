@@ -35,6 +35,9 @@ from models import (
     SemanticCacheSearchQuery,
     SemanticCacheSearchFilters,
     SemanticCacheSearchItem,
+    SemanticCacheEvaluateRequest,
+    SemanticCacheEvaluateResponse,
+    SemanticCacheEvaluation,
 )
 from db import (
     init_db,
@@ -278,15 +281,12 @@ def create_semantic_cache_item(
     )
 
 
-@app.post("/semantic-cache/search", response_model=SemanticCacheSearchResponse)
-def search_semantic_cache(
-    request: SemanticCacheSearchRequest,
-) -> SemanticCacheSearchResponse:
-    if request.limit < 1:
+def run_semantic_search(input_text: str, limit: int):
+    if limit < 1:
         raise HTTPException(status_code=400, detail="limit precisa ser no mínimo 1.")
-    limit = min(request.limit, 10)
+    limit = min(limit, 10)
 
-    fingerprint = build_fingerprint(request.input_text)
+    fingerprint = build_fingerprint(input_text)
     if not fingerprint["normalized_text"]:
         raise HTTPException(
             status_code=400, detail="input_text precisa ter conteúdo após a normalização."
@@ -315,30 +315,95 @@ def search_semantic_cache(
         for row in rows
     ]
 
+    query = SemanticCacheSearchQuery(
+        input_text=input_text,
+        normalized_text=fingerprint["normalized_text"],
+        embedding_model=OPENAI_EMBEDDING_MODEL,
+        embedding_dimension=len(embedding),
+    )
+    filters = SemanticCacheSearchFilters(
+        prompt_version=fingerprint["prompt_version"],
+        rules_version=fingerprint["rules_version"],
+        model_capability=fingerprint["model_capability"],
+    )
+    return query, filters, items
+
+
+def evaluate_best_match(items: list, threshold: float) -> dict:
+    if not items:
+        return {
+            "decision": "rejected",
+            "reason": "No candidates found for current fingerprint.",
+            "best_match": None,
+        }
+
+    best_match = items[0]
+    if best_match.similarity >= threshold:
+        reason = "Best match similarity is greater than or equal to threshold."
+        decision = "accepted"
+    else:
+        reason = "Best match similarity is below threshold."
+        decision = "rejected"
+    return {"decision": decision, "reason": reason, "best_match": best_match}
+
+
+@app.post("/semantic-cache/search", response_model=SemanticCacheSearchResponse)
+def search_semantic_cache(
+    request: SemanticCacheSearchRequest,
+) -> SemanticCacheSearchResponse:
+    query, filters, items = run_semantic_search(request.input_text, request.limit)
+
     log_block(
         "🔎 Busca semântica",
         {
             "input_text": request.input_text,
-            "normalized_text": fingerprint["normalized_text"],
-            "limit": limit,
+            "normalized_text": query.normalized_text,
+            "limit": min(request.limit, 10),
             "results": len(items),
             "best_similarity": round(items[0].similarity, 4) if items else "-",
         },
     )
     return SemanticCacheSearchResponse(
-        query=SemanticCacheSearchQuery(
-            input_text=request.input_text,
-            normalized_text=fingerprint["normalized_text"],
-            embedding_model=OPENAI_EMBEDDING_MODEL,
-            embedding_dimension=len(embedding),
+        query=query, filters=filters, count=len(items), items=items
+    )
+
+
+@app.post("/semantic-cache/evaluate", response_model=SemanticCacheEvaluateResponse)
+def evaluate_semantic_cache(
+    request: SemanticCacheEvaluateRequest,
+) -> SemanticCacheEvaluateResponse:
+    if not 0 < request.threshold <= 1:
+        raise HTTPException(
+            status_code=400, detail="threshold precisa estar entre 0 (exclusivo) e 1."
+        )
+
+    query, filters, items = run_semantic_search(request.input_text, request.limit)
+    result = evaluate_best_match(items, request.threshold)
+    best_match = result["best_match"]
+
+    log_block(
+        "⚖️  Avaliação de cache semântico",
+        {
+            "input_text": request.input_text,
+            "normalized_text": query.normalized_text,
+            "threshold": request.threshold,
+            "results": len(items),
+            "decision": result["decision"],
+            "best_similarity": round(best_match.similarity, 4) if best_match else "-",
+        },
+    )
+    return SemanticCacheEvaluateResponse(
+        query=query,
+        filters=filters,
+        evaluation=SemanticCacheEvaluation(
+            threshold=request.threshold,
+            decision=result["decision"],
+            reason=result["reason"],
+            best_match_similarity=best_match.similarity if best_match else None,
+            best_match_distance=best_match.distance if best_match else None,
         ),
-        filters=SemanticCacheSearchFilters(
-            prompt_version=fingerprint["prompt_version"],
-            rules_version=fingerprint["rules_version"],
-            model_capability=fingerprint["model_capability"],
-        ),
-        count=len(items),
-        items=items,
+        best_match=best_match,
+        candidates=items,
     )
 
 
