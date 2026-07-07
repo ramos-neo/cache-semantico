@@ -1,0 +1,44 @@
+### Primeira chamada: deve chamar IA
+
+POST http://localhost:8000/tickets/analyze
+Content-Type: application/json
+
+{
+  "message": "Tenho dúvidas sobre cobrança, pode me ajudar?"
+}
+
+### Segunda chamada igual: deve chamar IA novamente
+
+POST http://localhost:8000/tickets/analyze
+Content-Type: application/json
+
+{
+  "message": "Tenho dúvidas sobre cobrança, pode me ajudar?"
+}
+
+### Mensagem de cancelamento
+
+POST http://localhost:8000/tickets/analyze
+Content-Type: application/json
+
+{
+  "message": "Quero cancelar meu plano"
+}
+
+### Mensagem de suporte técnico
+
+POST http://localhost:8000/tickets/analyze
+Content-Type: application/json
+
+{
+  "message": "Meu aplicativo está travando ao abrir"
+}
+
+### Mensagem de conta
+
+POST http://localhost:8000/tickets/analyze
+Content-Type: application/json
+
+{
+  "message": "Não consigo acessar minha conta"
+}
