@@ -16,7 +16,7 @@ export const ticketAnalysisSchema = z.object({
 
 export type TicketAnalysis = z.infer<typeof ticketAnalysisSchema>;
 
-/** JSON Schema estrito para OpenAI Structured Outputs. */
+/** JSON Schema estrito para Gemini Structured Outputs (`responseJsonSchema`). */
 export const ticketAnalysisJsonSchema = {
   type: "object",
   additionalProperties: false,

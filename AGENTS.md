@@ -20,9 +20,9 @@ Repo ativo: [ramos-neo/cache-semantico](https://github.com/ramos-neo/cache-seman
 | Runtime | Node.js + TypeScript (`"type": "module"`) |
 | HTTP | Hono + `@hono/node-server` |
 | Validação HTTP | Zod |
-| IA (fase 1) | SDK oficial `openai` — **JSON Schema** (`response_format.json_schema`, `strict: true`) |
-| Embeddings | `openai.embeddings.create` (`text-embedding-3-small`, 1536 dims) |
-| Banco | Postgres 16 + pgvector (`docker-compose.yml`) |
+| IA (fase 1) | SDK oficial `@google/genai` — **JSON Schema** (`responseJsonSchema` + `responseMimeType: application/json`) |
+| Embeddings | `gemini.models.embedContent` (`gemini-embedding-001`, 1536 dims) |
+| Banco | Postgres 16 + pgvector (`docker/docker-compose.yml`) |
 | Driver DB | `pg` |
 
 **Não use LangChain na fase atual** — está reservado para a fase 2 (estudo). Ver seção abaixo.
@@ -47,11 +47,11 @@ src/
 ├── config.ts                # env + runtimeConfig mutável
 ├── log.ts                   # logBlock (logs didáticos)
 ├── fingerprint.ts           # normalize, buildFingerprint, buildCacheKey
-├── schemas/ticket.ts        # Zod + ticketAnalysisJsonSchema (OpenAI)
+├── schemas/ticket.ts        # Zod + ticketAnalysisJsonSchema (Gemini)
 ├── db/index.ts              # initDb, insert, searchSimilar (SQL)
 ├── ai/
-│   ├── openai-client.ts
-│   ├── classify.ts          # chat + json_schema
+│   ├── gemini-client.ts
+│   ├── classify.ts          # generateContent + responseJsonSchema
 │   └── embeddings.ts
 ├── cache/
 │   ├── exact.ts             # Map + aiCallCount
@@ -102,19 +102,19 @@ Baixo → risco de falso positivo; alto → mais misses.
 
 - Nunca commitar `.env`.
 - Usar `.env.example` sem chaves reais.
-- `OPENAI_API_KEY` obrigatória para classify/embeddings.
+- `GEMINI_API_KEY` obrigatória para classify/embeddings.
 
 ## Como rodar (agente)
 
 ```bash
-docker compose up -d
-cp .env.example .env   # se necessário; preencher OPENAI_API_KEY
+docker compose -f docker/docker-compose.yml up -d
+cp .env.example .env   # se necessário; preencher GEMINI_API_KEY
 npm install
 npm run dev            # http://localhost:8000
 ```
 
 Health / DB: `GET /health`, `GET /db/status`.  
-Fluxo demo: `test.http` (ordem de cima para baixo).
+Fluxo demo: Thunder Client (`thunder-tests/`, coleção `cache-semantico`) ou `test.http` (REST Client).
 
 Python (referência): ver `python/README.md` — `cd python && python main.py`.
 
@@ -136,16 +136,16 @@ Python (referência): ver `python/README.md` — `cd python && python main.py`.
 Quando for pedido explicitamente:
 
 1. Extrair interfaces `Classifier` / `Embedder` em `src/ai/`
-2. Manter implementação atual OpenAI SDK
+2. Manter implementação atual Gemini SDK
 3. Adicionar `src/ai/langchain/` (LangChain.js)
-4. Seleção via env `AI_PROVIDER=openai|langchain`
+4. Seleção via env `AI_PROVIDER=gemini|langchain`
 
 Não instalar LangChain nem refatorar providers sem solicitação.
 
 ## O que evitar
 
 - Introduzir Nest/Express/Fastify no lugar do Hono sem pedido.
-- Trocar JSON Schema da OpenAI por outro mecanismo de structured output na fase 1.
+- Trocar JSON Schema do Gemini por outro mecanismo de structured output na fase 1.
 - Apagar `python/` (é referência intencional).
 - Adicionar índice vetorial HNSW/Redis/TTL/PII policies a menos que seja a tarefa.
 - Force push em `main` ou alterar git config.

@@ -1,10 +1,10 @@
 import "dotenv/config";
 
-export const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
-export const OPENAI_EMBEDDING_MODEL =
-  process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small";
-export const OPENAI_EMBEDDING_DIMENSIONS = Number(
-  process.env.OPENAI_EMBEDDING_DIMENSIONS ?? "1536",
+export const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
+export const GEMINI_EMBEDDING_MODEL =
+  process.env.GEMINI_EMBEDDING_MODEL ?? "gemini-embedding-001";
+export const GEMINI_EMBEDDING_DIMENSIONS = Number(
+  process.env.GEMINI_EMBEDDING_DIMENSIONS ?? "1536",
 );
 export const MODEL_TEMPERATURE = Number(process.env.MODEL_TEMPERATURE ?? "0");
 

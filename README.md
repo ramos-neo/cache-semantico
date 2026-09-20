@@ -1,6 +1,6 @@
 # Analisador de Tickets — cache semântico (TypeScript + Hono)
 
-Analisador de tickets de suporte com IA (OpenAI SDK + JSON Schema), Fast-style API em **Hono**, e Postgres + pgvector para cache semântico.
+Analisador de tickets de suporte com IA (Gemini SDK + JSON Schema), Fast-style API em **Hono**, e Postgres + pgvector para cache semântico.
 
 Port do projeto didático [devfullcycle/mba-ia-cache](https://github.com/devfullcycle/mba-ia-cache) para TypeScript.
 
@@ -43,17 +43,17 @@ O código Python original fica em [`python/`](python/) para estudo/comparação.
 ## Subir o banco (Docker)
 
 ```bash
-docker compose up -d
+docker compose -f docker/docker-compose.yml up -d
 ```
 
-Postgres com pgvector (`pgvector/pgvector:pg16`). Para apagar dados: `docker compose down -v`.
+Postgres com pgvector (`pgvector/pgvector:pg16`). Para apagar dados: `docker compose -f docker/docker-compose.yml down -v`.
 
 ## Rodar a aplicação
 
 ```bash
 npm install
 cp .env.example .env
-# Preencha OPENAI_API_KEY no .env
+# Preencha GEMINI_API_KEY no .env
 npm run dev
 ```
 
@@ -78,21 +78,21 @@ npm start
 | `POST` | `/semantic-cache/search` | Busca candidatos parecidos |
 | `POST` | `/semantic-cache/evaluate` | Avalia com threshold |
 
-Use [test.http](test.http) para exercitar o fluxo do zero.
+Use a coleção **Thunder Client** em [`thunder-tests/`](thunder-tests/) (env `local`, requests 0→4) ou o espelho [test.http](test.http) com REST Client.
 
 ## IA (fase 1)
 
-- SDK oficial `openai`
-- Classificação via `response_format: json_schema` (strict)
-- Embeddings via `embeddings.create`
+- SDK oficial `@google/genai`
+- Classificação via `responseJsonSchema` + `application/json`
+- Embeddings via `embedContent` (`gemini-embedding-001`, 1536 dims)
 
 ## Fase 2 (estudo) — LangChain
 
 Ainda **não** implementado. Ideia:
 
 - Interfaces `Classifier` / `Embedder` em `src/ai/`
-- Provider atual: OpenAI SDK
-- Próximo: `src/ai/langchain/` com LangChain.js, selecionável por `AI_PROVIDER=openai|langchain`
+- Provider atual: Gemini SDK
+- Próximo: `src/ai/langchain/` com LangChain.js, selecionável por `AI_PROVIDER=gemini|langchain`
 
 ## Threshold
 

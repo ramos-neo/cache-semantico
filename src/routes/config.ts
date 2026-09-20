@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import {
   DATABASE_URL,
-  OPENAI_EMBEDDING_DIMENSIONS,
-  OPENAI_EMBEDDING_MODEL,
+  GEMINI_EMBEDDING_DIMENSIONS,
+  GEMINI_EMBEDDING_MODEL,
   runtimeConfig,
 } from "../config.js";
 import { logBlock } from "../log.js";
@@ -13,8 +13,8 @@ export const configRoutes = new Hono();
 function configResponse() {
   return {
     ...runtimeConfig,
-    embedding_model: OPENAI_EMBEDDING_MODEL,
-    embedding_dimensions: OPENAI_EMBEDDING_DIMENSIONS,
+    embedding_model: GEMINI_EMBEDDING_MODEL,
+    embedding_dimensions: GEMINI_EMBEDDING_DIMENSIONS,
     database_configured: Boolean(DATABASE_URL),
   };
 }

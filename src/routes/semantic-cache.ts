@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { embedQuery } from "../ai/embeddings.js";
 import { evaluateBestMatch } from "../cache/semantic.js";
-import { OPENAI_EMBEDDING_MODEL } from "../config.js";
+import { GEMINI_EMBEDDING_MODEL } from "../config.js";
 import {
   insertSemanticCacheItem,
   searchSimilarSemanticCacheItems,
@@ -65,7 +65,7 @@ export async function runSemanticSearch(inputText: string, limit: number) {
   const query = {
     input_text: inputText,
     normalized_text: fingerprint.normalized_text,
-    embedding_model: OPENAI_EMBEDDING_MODEL,
+    embedding_model: GEMINI_EMBEDDING_MODEL,
     embedding_dimension: embedding.length,
   };
   const filters = {
@@ -110,7 +110,7 @@ semanticCacheRoutes.post("/semantic-cache/items", async (c) => {
     ...fingerprint,
     id: itemId,
     input_text: body.input_text,
-    embedding_model: OPENAI_EMBEDDING_MODEL,
+    embedding_model: GEMINI_EMBEDDING_MODEL,
     embedding_dimension: dimension,
     embedding_preview: embedding.slice(0, 5),
     response_json: body.response_json,

@@ -1,15 +1,28 @@
-# Demonstração do /tickets/analyze do zero.
-# Pré-requisitos: banco vazio (docker compose up -d) e servidor recém-subido
-# (npm run dev). Rode os blocos de cima para baixo, na ordem.
+# Demo da cascata de cache — `/tickets/analyze`
 #
-# A cada requisição, observe o campo "source":
-#   ai_model       -> não tinha cache; chamou a IA e salvou no pgvector.
-#   exact_cache     -> mesma mensagem de antes; respondeu da memória.
-#   semantic_cache  -> mensagem parecida; respondeu do pgvector, sem IA.
+# Preferido: Thunder Client (coleção em thunder-tests/)
+# Alternativa: REST Client (humao.rest-client) — "Send Request" abaixo
+#
+# Pré-requisitos: banco vazio (docker compose up -d) e `npm run dev`.
+# Rode os blocos de cima para baixo.
+#
+# A cada resposta, observe o campo "source":
+#   ai_model        -> miss; chamou a IA e salvou no pgvector
+#   exact_cache     -> mesma mensagem; respondeu da memória
+#   semantic_cache  -> mensagem parecida; respondeu do pgvector, sem IA
+#
+# --- Thunder Client ---
+# 1. Extensão rangav.vscode-thunder-client instalada
+# 2. Reload Window (Cmd+Shift+P) se a coleção não aparecer
+# 3. Env "local" ativo (baseUrl = http://localhost:8000)
+# 4. Collections → cache-semantico → requests 0 → 4, nesta ordem
+# 5. Cmd+Enter para enviar; confira Tests (status + json.source)
+
+@baseUrl = http://localhost:8000
 
 ### 0. Garante o threshold padrão do cache semântico
 
-PUT http://localhost:8000/config
+PUT {{baseUrl}}/config
 Content-Type: application/json
 
 {
@@ -18,7 +31,7 @@ Content-Type: application/json
 
 ### 1. Primeira mensagem: sem cache -> chama a IA e salva no pgvector (source=ai_model)
 
-POST http://localhost:8000/tickets/analyze
+POST {{baseUrl}}/tickets/analyze
 Content-Type: application/json
 
 {
@@ -27,7 +40,7 @@ Content-Type: application/json
 
 ### 2. Mesma mensagem: cache exato em memória (source=exact_cache)
 
-POST http://localhost:8000/tickets/analyze
+POST {{baseUrl}}/tickets/analyze
 Content-Type: application/json
 
 {
@@ -36,7 +49,7 @@ Content-Type: application/json
 
 ### 3. Mensagem parecida: cache semântico, sem chamar a IA (source=semantic_cache)
 
-POST http://localhost:8000/tickets/analyze
+POST {{baseUrl}}/tickets/analyze
 Content-Type: application/json
 
 {
@@ -45,7 +58,7 @@ Content-Type: application/json
 
 ### 4. Mensagem diferente: sem candidato bom -> chama a IA e salva (source=ai_model)
 
-POST http://localhost:8000/tickets/analyze
+POST {{baseUrl}}/tickets/analyze
 Content-Type: application/json
 
 {

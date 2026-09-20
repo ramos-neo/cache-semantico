@@ -1,13 +1,13 @@
 import {
+  GEMINI_MODEL,
   MODEL_TEMPERATURE,
-  OPENAI_MODEL,
 } from "../config.js";
 import {
   ticketAnalysisJsonSchema,
   ticketAnalysisSchema,
   type TicketAnalysis,
 } from "../schemas/ticket.js";
-import { openai } from "./openai-client.js";
+import { gemini } from "./gemini-client.js";
 
 const SYSTEM_PROMPT =
   "Você é um classificador de tickets de suporte.\n" +
@@ -17,26 +17,20 @@ const SYSTEM_PROMPT =
   "Não invente categorias fora da lista.";
 
 export async function classifyTicket(message: string): Promise<TicketAnalysis> {
-  const completion = await openai.chat.completions.create({
-    model: OPENAI_MODEL,
-    temperature: MODEL_TEMPERATURE,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: `Mensagem:\n${message}` },
-    ],
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "ticket_analysis",
-        strict: true,
-        schema: ticketAnalysisJsonSchema,
-      },
+  const response = await gemini.models.generateContent({
+    model: GEMINI_MODEL,
+    contents: `Mensagem:\n${message}`,
+    config: {
+      systemInstruction: SYSTEM_PROMPT,
+      temperature: MODEL_TEMPERATURE,
+      responseMimeType: "application/json",
+      responseJsonSchema: ticketAnalysisJsonSchema,
     },
   });
 
-  const content = completion.choices[0]?.message?.content;
+  const content = response.text;
   if (!content) {
-    throw new Error("Resposta vazia do modelo OpenAI.");
+    throw new Error("Resposta vazia do modelo Gemini.");
   }
 
   return ticketAnalysisSchema.parse(JSON.parse(content));

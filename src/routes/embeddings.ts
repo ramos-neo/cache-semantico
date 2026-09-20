@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { embedDocuments } from "../ai/embeddings.js";
-import { OPENAI_EMBEDDING_MODEL } from "../config.js";
+import { GEMINI_EMBEDDING_MODEL } from "../config.js";
 import { normalizeText } from "../fingerprint.js";
 import { logBlock } from "../log.js";
 import { embeddingsRequestSchema } from "../schemas/ticket.js";
@@ -34,11 +34,11 @@ embeddingsRoutes.post("/embeddings/generate", async (c) => {
   }));
 
   logBlock("🔢 Embeddings gerados", {
-    model: OPENAI_EMBEDDING_MODEL,
+    model: GEMINI_EMBEDDING_MODEL,
     texts_count: items.length,
     dimension: items[0]?.embedding_dimension ?? 0,
     elapsed_ms: `${elapsedMs}ms`,
   });
 
-  return c.json({ model: OPENAI_EMBEDDING_MODEL, items });
+  return c.json({ model: GEMINI_EMBEDDING_MODEL, items });
 });

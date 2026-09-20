@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import pg from "pg";
 import {
   DATABASE_URL,
-  OPENAI_EMBEDDING_DIMENSIONS,
+  GEMINI_EMBEDDING_DIMENSIONS,
 } from "../config.js";
 import { logBlock } from "../log.js";
 
@@ -17,7 +17,7 @@ function toPgvector(embedding: number[]): string {
 }
 
 export async function initDb(): Promise<void> {
-  const dimensions = OPENAI_EMBEDDING_DIMENSIONS;
+  const dimensions = GEMINI_EMBEDDING_DIMENSIONS;
   const client = await pool.connect();
 
   try {
@@ -67,7 +67,7 @@ export async function getDbStatus(): Promise<DbStatus> {
   const status: DbStatus = {
     connected: false,
     pgvector_enabled: false,
-    embedding_dimensions: OPENAI_EMBEDDING_DIMENSIONS,
+    embedding_dimensions: GEMINI_EMBEDDING_DIMENSIONS,
     table: null,
   };
 
