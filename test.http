@@ -1,6 +1,6 @@
 # Demonstração do /tickets/analyze do zero.
 # Pré-requisitos: banco vazio (docker compose up -d) e servidor recém-subido
-# (python main.py). Rode os blocos de cima para baixo, na ordem.
+# (npm run dev). Rode os blocos de cima para baixo, na ordem.
 #
 # A cada requisição, observe o campo "source":
 #   ai_model       -> não tinha cache; chamou a IA e salvou no pgvector.

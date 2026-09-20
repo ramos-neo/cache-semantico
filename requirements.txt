@@ -1,7 +1,0 @@
-fastapi
-uvicorn
-langchain>=1.0
-langchain-openai>=1.0
-python-dotenv
-pydantic
-psycopg[binary]

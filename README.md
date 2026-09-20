@@ -1,40 +1,35 @@
-# Analisador de Tickets — cache semântico no fluxo principal
+# Analisador de Tickets — cache semântico (TypeScript + Hono)
 
-Analisador de tickets de suporte usando IA com LangChain e FastAPI, com Postgres +
-pgvector para cache semântico.
+Analisador de tickets de suporte com IA (OpenAI SDK + JSON Schema), Fast-style API em **Hono**, e Postgres + pgvector para cache semântico.
 
-## Cache no /tickets/analyze
+Port do projeto didático [devfullcycle/mba-ia-cache](https://github.com/devfullcycle/mba-ia-cache) para TypeScript.
 
-Agora o `/tickets/analyze` tenta o cache **antes** de chamar a IA e, no fim, **grava**
-o novo resultado. A ordem é:
+## Cache no `/tickets/analyze`
 
-1. **Cache exato** (fingerprint em memória) → `source: exact_cache`.
-2. Se não houver, **cache semântico**: gera o embedding, busca no pgvector e avalia o
-   melhor candidato contra o `semantic_cache_threshold`. Se passar no corte →
-   `source: semantic_cache` (usa o `response_json` salvo, **sem** chamar a IA).
-3. Se não houver candidato aceito → chama a IA → `source: ai_model`.
-4. **Gravação no cache semântico**: no caminho da IA (e só nele), a resposta é salva no
-   pgvector reaproveitando o embedding já gerado no passo 2 — assim uma próxima
-   mensagem parecida pode ser resolvida por `semantic_cache`.
+A ordem é:
 
-A resposta traz `semantic_cache` (avaliação: `decision`, `threshold`, `best_match`…) e
-`semantic_cache_write` (gravação: `attempted`, `saved`, `reason`, `item_id`,
-`embedding_dimension`). A gravação **só acontece quando a IA é chamada**: em exact hit e
-semantic hit nada novo é gravado. Se a gravação falhar, a resposta da IA é retornada
-mesmo assim (`saved: false`, erro no log).
+1. **Cache exato** (fingerprint em memória) → `source: exact_cache`
+2. Se não houver, **cache semântico**: embedding + busca no pgvector + `semantic_cache_threshold` → `source: semantic_cache`
+3. Se não houver candidato aceito → chama a IA (JSON Schema) → `source: ai_model`
+4. **Gravação no cache semântico** só no caminho da IA, reaproveitando o embedding do passo 2
 
-O `semantic_cache_threshold` é ajustável em runtime pelo `PUT /config` (0 < t ≤ 1) —
-subir o corte gera mais misses, baixar aceita mais (e arrisca falso positivo). Ainda
-**não** há política avançada do que pode ou não ser cacheado (confiança mínima, dados
-sensíveis): por ora toda resposta de IA vira item do cache semântico.
+A gravação **só acontece quando a IA é chamada**. O `semantic_cache_threshold` é ajustável em runtime pelo `PUT /config` (0 < t ≤ 1).
 
 ## Organização do código
 
-- `main.py` — app FastAPI, endpoints e fluxo (chama funções do `db.py`).
-- `db.py` — conexão, extensão `vector`, tabela, índice e inserção (SQL fica aqui).
-- `models.py` — modelos Pydantic.
-- `config.py` — `.env`, configs e fábricas de modelo LangChain.
-- `log_helpers.py` — log em bloco.
+```
+src/
+├── index.ts              # bootstrap + initDb
+├── app.ts                # Hono app
+├── config.ts             # env + runtime config
+├── log.ts
+├── fingerprint.ts
+├── schemas/ticket.ts     # Zod + JSON Schema (OpenAI)
+├── db/index.ts           # pgvector
+├── ai/                   # OpenAI classify + embeddings
+├── cache/                # exact + semantic helpers
+└── routes/               # endpoints
+```
 
 ## Subir o banco (Docker)
 
@@ -42,89 +37,57 @@ sensíveis): por ora toda resposta de IA vira item do cache semântico.
 docker compose up -d
 ```
 
-Isso sobe um Postgres com pgvector (imagem `pgvector/pgvector:pg16`).
-
-Para parar: `docker compose down`. Para apagar os dados: `docker compose down -v`.
+Postgres com pgvector (`pgvector/pgvector:pg16`). Para apagar dados: `docker compose down -v`.
 
 ## Rodar a aplicação
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+npm install
 cp .env.example .env
-python main.py
+# Preencha OPENAI_API_KEY no .env
+npm run dev
 ```
 
-Preencha `OPENAI_API_KEY` no `.env`. No startup, a aplicação habilita a extensão
-`vector`, cria a tabela `ai_response_cache` e o índice de fingerprint. Se o Postgres
-não estiver no ar, o erro aparece claro no terminal.
+Servidor em `http://localhost:8000`. No startup a app habilita a extensão `vector`, cria a tabela `ai_response_cache` e o índice de fingerprint.
 
-## Endpoints novos
+Build de produção:
 
-```http
-GET  /db/status              # valida conexão, pgvector e existência da tabela
-POST /semantic-cache/items   # gera embedding e salva um item no Postgres
+```bash
+npm run build
+npm start
 ```
 
-Entrada do `/semantic-cache/items`:
+## Endpoints
 
-```json
-{
-  "input_text": "Como cancelo minha assinatura?",
-  "response_json": {
-    "category": "cancellation",
-    "confidence": 0.92,
-    "reason": "O usuário quer cancelar a assinatura."
-  }
-}
-```
+| Método | Rota | Função |
+|--------|------|--------|
+| `GET`/`PUT` | `/config` | Lê/ajusta threshold e versões |
+| `GET` | `/db/status` | Saúde do Postgres/pgvector |
+| `POST` | `/tickets/analyze` | Cascata de cache + classificação |
+| `POST` | `/embeddings/generate` | Gera embeddings |
+| `POST` | `/semantic-cache/items` | Insere item manualmente |
+| `POST` | `/semantic-cache/search` | Busca candidatos parecidos |
+| `POST` | `/semantic-cache/evaluate` | Avalia com threshold |
 
-A resposta traz os dados do item e apenas um `embedding_preview` (5 números). O vetor
-completo **não** é retornado — ele fica salvo na coluna `embedding VECTOR(1536)`.
+Use [test.http](test.http) para exercitar o fluxo do zero.
 
-## Busca por similaridade
+## IA (fase 1)
 
-```http
-POST /semantic-cache/search
-```
+- SDK oficial `openai`
+- Classificação via `response_format: json_schema` (strict)
+- Embeddings via `embeddings.create`
 
-Agora dá para **buscar respostas parecidas** no pgvector. O endpoint recebe um texto
-novo, normaliza, gera o embedding com LangChain e compara com os embeddings **já
-salvos** usando o operador de distância `<=>` do pgvector, filtrando pelo fingerprint
-atual (`prompt_version`, `rules_version`, `model_capability`).
+## Fase 2 (estudo) — LangChain
 
-```json
-{ "input_text": "Preciso cancelar meu plano", "limit": 5 }
-```
+Ainda **não** implementado. Ideia:
 
-Cada item retorna `distance` (quanto menor, mais próximo) e `similarity` (`1 -
-distance`, só para leitura didática). `limit` é opcional (padrão 5, máximo 10).
+- Interfaces `Classifier` / `Embedder` em `src/ai/`
+- Provider atual: OpenAI SDK
+- Próximo: `src/ai/langchain/` com LangChain.js, selecionável por `AI_PROVIDER=openai|langchain`
 
-Os resultados são apenas **candidatos**: a busca só encontra parecidos, não decide se
-podem ser reutilizados.
+## Threshold
 
-## Avaliação com threshold
+- **Baixo** demais → risco de falso positivo (reutiliza resposta só “parecida”)
+- **Alto** demais → mais misses (chama a IA à toa)
 
-```http
-POST /semantic-cache/evaluate
-```
-
-O **threshold** é o corte mínimo de similaridade para aceitar o melhor candidato. O
-endpoint busca os candidatos, pega o mais próximo (`best_match`) e compara com o
-threshold:
-
-```json
-{ "input_text": "Preciso cancelar meu plano", "threshold": 0.9, "limit": 5 }
-```
-
-- `decision: accepted` — `best_match.similarity >= threshold`.
-- `decision: rejected` — similaridade abaixo do threshold, ou nenhum candidato.
-
-O ajuste do threshold é um trade-off: **baixo** demais aceita **falso positivo**
-(reutiliza uma resposta que só parece próxima — ex.: "cancelar meu plano" vs "cancelar
-minha reunião"); **alto** demais gera mais **misses** (chama a IA à toa). Por isso
-*parecido não significa automaticamente reutilizável*.
-
-Esta etapa ainda **não** integra ao `/tickets/analyze` e **não** chama o modelo nem
-grava no banco — só demonstra a decisão. A integração no fluxo principal vem depois.
+*Parecido não significa automaticamente reutilizável.*
