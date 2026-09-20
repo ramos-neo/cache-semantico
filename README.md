@@ -18,19 +18,28 @@ A gravação **só acontece quando a IA é chamada**. O `semantic_cache_threshol
 ## Organização do código
 
 ```
-src/
-├── index.ts              # bootstrap + initDb
-├── app.ts                # Hono app
-├── config.ts             # env + runtime config
+src/                      # app principal (TypeScript + Hono)
+├── index.ts
+├── app.ts
+├── config.ts
 ├── log.ts
 ├── fingerprint.ts
-├── schemas/ticket.ts     # Zod + JSON Schema (OpenAI)
-├── db/index.ts           # pgvector
-├── ai/                   # OpenAI classify + embeddings
-├── cache/                # exact + semantic helpers
-└── routes/               # endpoints
+├── schemas/ticket.ts
+├── db/
+├── ai/
+├── cache/
+└── routes/
+
+python/                   # referência do curso (FastAPI + LangChain)
+├── main.py
+├── db.py
+├── models.py
+├── config.py
+├── log_helpers.py
+└── requirements.txt
 ```
 
+O código Python original fica em [`python/`](python/) para estudo/comparação. Ver [python/README.md](python/README.md).
 ## Subir o banco (Docker)
 
 ```bash
