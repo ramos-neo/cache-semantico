@@ -1,0 +1,22 @@
+.placeholder {
+  max-width: 40rem;
+  padding: 0.5rem 0;
+
+  h1 {
+    margin: 0 0 0.5rem;
+    font: var(--mat-sys-headline-medium);
+    color: var(--mat-sys-on-surface);
+  }
+
+  &__lead {
+    margin: 0 0 0.75rem;
+    font: var(--mat-sys-title-medium);
+    color: var(--mat-sys-primary);
+  }
+
+  &__desc {
+    margin: 0;
+    font: var(--mat-sys-body-large);
+    color: var(--mat-sys-on-surface-variant);
+  }
+}

@@ -1,0 +1,49 @@
+<div class="shell">
+  <header class="shell__header">
+    <mat-toolbar class="shell__toolbar">
+      <a routerLink="/lab" class="shell__brand" aria-label="Cache Semântico — início">
+        <mat-icon aria-hidden="true">hub</mat-icon>
+        <span class="shell__brand-text">Cache Semântico</span>
+      </a>
+
+      <span class="shell__spacer"></span>
+
+      <button
+        type="button"
+        mat-button
+        class="shell__health"
+        [class.shell__health--ok]="healthState() === 'healthy'"
+        [class.shell__health--bad]="healthState() === 'unhealthy'"
+        [class.shell__health--checking]="healthState() === 'checking'"
+        [matTooltip]="healthTooltip()"
+        (click)="refreshHealth()"
+        [attr.aria-label]="healthAriaLabel()"
+      >
+        <mat-icon aria-hidden="true">{{ healthIcon() }}</mat-icon>
+        <span class="shell__health-label">{{ healthLabel() }}</span>
+      </button>
+    </mat-toolbar>
+  </header>
+
+  <div class="shell__body">
+    <nav class="shell__nav" aria-label="Navegação principal">
+      <mat-nav-list>
+        @for (item of navItems; track item.path) {
+          <a
+            mat-list-item
+            [routerLink]="item.path"
+            routerLinkActive="shell__nav-link--active"
+            [routerLinkActiveOptions]="{ exact: true }"
+          >
+            <mat-icon matListItemIcon aria-hidden="true">{{ item.icon }}</mat-icon>
+            <span matListItemTitle>{{ item.label }}</span>
+          </a>
+        }
+      </mat-nav-list>
+    </nav>
+
+    <main class="shell__main" id="conteudo-principal">
+      <router-outlet />
+    </main>
+  </div>
+</div>

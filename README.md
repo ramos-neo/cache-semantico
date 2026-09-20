@@ -30,6 +30,10 @@ src/                      # app principal (TypeScript + Hono)
 ├── cache/
 └── routes/
 
+web/                      # portal Angular 22 + Material
+├── src/app/
+└── README.md
+
 python/                   # referência do curso (FastAPI + LangChain)
 ├── main.py
 ├── db.py
@@ -40,6 +44,21 @@ python/                   # referência do curso (FastAPI + LangChain)
 ```
 
 O código Python original fica em [`python/`](python/) para estudo/comparação. Ver [python/README.md](python/README.md).
+
+## Frontend (portal Angular)
+
+O shell do portal de estudo fica em [`web/`](web/) (Angular 22 + Material, package próprio).
+
+```bash
+# Terminal 1 — API
+npm run dev
+
+# Terminal 2 — UI (proxy /api → http://localhost:8000)
+cd web && npm install && npm start
+```
+
+Abre `http://localhost:4200`. Detalhes, `baseUrl` e CORS: [web/README.md](web/README.md).
+
 ## Subir o banco (Docker)
 
 ```bash
