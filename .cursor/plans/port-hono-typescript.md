@@ -4,25 +4,25 @@ overview: Port completo do analisador de tickets (cache exato + semântico) de P
 todos:
   - id: scaffold
     content: Criar package.json, tsconfig, .gitignore Node e esqueleto src/
-    status: pending
+    status: completed
   - id: core
     content: Portar config, log, fingerprint, db (pgvector) e schemas Zod + JSON Schema
-    status: pending
+    status: completed
   - id: ai-cache
     content: Implementar OpenAI classify/embeddings e caches exact/semantic
-    status: pending
+    status: completed
   - id: routes
     content: Implementar rotas Hono espelhando main.py + bootstrap initDb
-    status: pending
+    status: completed
   - id: cleanup-docs
     content: Remover Python, atualizar README e test.http
-    status: pending
+    status: completed
   - id: remote-push
     content: Apontar origin para ramos-neo/cache-semantico e fazer push
-    status: pending
+    status: completed
   - id: phase2-note
     content: Documentar no README o gancho da fase 2 com LangChain (sem implementar)
-    status: pending
+    status: completed
 isProject: true
 ---
 
