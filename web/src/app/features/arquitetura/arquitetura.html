@@ -1,0 +1,179 @@
+<section class="arq" aria-labelledby="arq-title">
+  <header class="arq__header">
+    <h1 id="arq-title">Arquitetura</h1>
+    <p class="arq__lead">
+      Como a cascata de cache evita chamadas desnecessárias ao LLM — e onde cada
+      peça mora no código.
+    </p>
+  </header>
+
+  <aside class="arq__callout arq__callout--study" role="note" aria-labelledby="arq-study-title">
+    <mat-icon aria-hidden="true">school</mat-icon>
+    <div>
+      <h2 id="arq-study-title" class="arq__callout-title">Estudo / não produção</h2>
+      <p>
+        Este portal e a API são material didático do MBA. Não há autenticação,
+        rate limit, PII policies nem TTL de cache — use só em ambiente local de
+        aprendizado.
+      </p>
+    </div>
+  </aside>
+
+  <!-- 2.1 Camadas -->
+  <section class="arq__section" aria-labelledby="arq-layers-title">
+    <h2 id="arq-layers-title" class="arq__section-title">Camadas</h2>
+    <p class="arq__section-lead">
+      Três papéis no caminho da análise. Hoje App e Provider estão ativos; o
+      Proxy é o próximo passo de estudo.
+    </p>
+
+    <div class="arq__diagram" role="img" aria-label="Diagrama das camadas App, Proxy e Provider">
+      <pre class="arq__ascii">+------------------+     +------------------+     +------------------+
+|  App (Hono)      |     |  Proxy/Gateway   |     |  Provider        |
+|  cascata cache   | --> |  LiteLLM         | --> |  Gemini          |
+|  /tickets/analyze|     |  (futuro)        |     |  classify+embed  |
++------------------+     +------------------+     +------------------+
+         ^                        ^                        ^
+         |                        |                        |
+    fase atual               change              SDK @google/genai
+                           proxy-litellm</pre>
+    </div>
+
+    <ul class="arq__layers">
+      <li>
+        <h3>App (Hono)</h3>
+        <p>
+          Runtime TypeScript em <code>src/</code>: fingerprint, cache exact em
+          memória, busca semântica no pgvector e orquestração em
+          <code>POST /tickets/analyze</code>.
+        </p>
+      </li>
+      <li>
+        <h3>Proxy / Gateway</h3>
+        <p>
+          Camada planejada para unificar providers via LiteLLM. Ainda não faz
+          parte do Lab MVP — ver callout abaixo.
+        </p>
+      </li>
+      <li>
+        <h3>Provider (Gemini)</h3>
+        <p>
+          Classificação com JSON Schema e embeddings
+          (<code>gemini-embedding-001</code>, 1536 dims). Só é chamado no miss
+          da cascata.
+        </p>
+      </li>
+    </ul>
+
+    <!-- 2.3 LiteLLM futuro -->
+    <aside class="arq__callout arq__callout--future" role="note" aria-labelledby="arq-litellm-title">
+      <mat-icon aria-hidden="true">upcoming</mat-icon>
+      <div>
+        <h3 id="arq-litellm-title" class="arq__callout-title">LiteLLM — próximo estudo</h3>
+        <p>
+          O proxy LiteLLM é trabalho planejado no change
+          <code>proxy-litellm</code>. Não é necessário para o Lab MVP: a App
+          fala direto com o SDK Gemini.
+        </p>
+      </div>
+    </aside>
+  </section>
+
+  <!-- 2.2 Cascata -->
+  <section class="arq__section" aria-labelledby="arq-cascade-title">
+    <h2 id="arq-cascade-title" class="arq__section-title">Cascata exact → semantic → AI</h2>
+    <p class="arq__section-lead">
+      Ordem fixa em <code>src/routes/tickets.ts</code>. Gravação no cache
+      semântico acontece <strong>somente</strong> no caminho AI.
+    </p>
+
+    <div class="arq__diagram" role="img" aria-label="Fluxo da cascata de cache">
+      <pre class="arq__ascii">mensagem
+   |
+   v
+fingerprint + chave SHA-256
+   |
+   +-- exact hit? --sim--> source: exact_cache
+   |                       (sem embedding, sem pgvector, sem write)
+   |
+   nao
+   |
+   v
+embedding + busca pgvector + evaluate(threshold)
+   |
+   +-- semantic hit? --sim--> source: semantic_cache
+   |                          (sem IA, sem write novo)
+   |
+   nao (miss)
+   |
+   v
+classifyTicket (Gemini)
+   |
+   +-- grava exact (memória)
+   +-- grava semantic (pgvector, reusa embedding)
+   |
+   v
+source: ai_model</pre>
+    </div>
+
+    <ol class="arq__paths">
+      <li>
+        <h3><code>exact_cache</code></h3>
+        <p>
+          Mesma chave SHA-256 já vista neste processo. Não gera embedding, não
+          consulta pgvector, não grava. <code>semantic_cache</code> e
+          <code>semantic_cache_write</code> ficam com
+          <code>attempted: false</code> / skipped.
+        </p>
+      </li>
+      <li>
+        <h3><code>semantic_cache</code></h3>
+        <p>
+          Exact miss → gera embedding, busca candidatos, avalia similaridade ≥
+          threshold. Hit: devolve o <code>response_json</code> (se inválido,
+          trata como miss). Não chama IA e não cria item novo.
+        </p>
+      </li>
+      <li>
+        <h3><code>ai_model</code></h3>
+        <p>
+          Miss total → classifica com Gemini, grava no exact e tenta gravar no
+          semântico reusando o embedding da busca. Se a gravação semântica
+          falhar, a API ainda retorna a resposta da IA
+          (<code>saved: false</code>).
+        </p>
+      </li>
+    </ol>
+  </section>
+
+  <!-- 3.1 Glossário -->
+  <section class="arq__section" aria-labelledby="arq-glossary-title">
+    <h2 id="arq-glossary-title" class="arq__section-title">Glossário</h2>
+    <dl class="arq__glossary">
+      @for (entry of glossary; track entry.term) {
+        <div class="arq__glossary-item">
+          <dt><code>{{ entry.term }}</code></dt>
+          <dd>{{ entry.definition }}</dd>
+        </div>
+      }
+    </dl>
+  </section>
+
+  <!-- 3.2 Referências de código -->
+  <section class="arq__section" aria-labelledby="arq-code-title">
+    <h2 id="arq-code-title" class="arq__section-title">Onde olhar no código</h2>
+    <p class="arq__section-lead">
+      Trechos curados para estudo — abra o path no IDE. Snippets não são
+      executados aqui; a fonte da verdade é o arquivo em <code>src/</code>.
+    </p>
+    <ul class="arq__refs">
+      @for (ref of codeRefs; track ref.path) {
+        <li>
+          <h3>{{ ref.title }}</h3>
+          <p class="arq__ref-path"><code>{{ ref.path }}</code></p>
+          <p>{{ ref.responsibility }}</p>
+        </li>
+      }
+    </ul>
+  </section>
+</section>

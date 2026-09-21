@@ -1,0 +1,149 @@
+<section class="cenarios" aria-labelledby="cenarios-title">
+  <header class="cenarios__header">
+    <h1 id="cenarios-title">Cenários</h1>
+    <p class="cenarios__lead">
+      Roteiro didático alinhado a <code>test.http</code>: AI → exact → semantic → AI.
+      Cada passo de analyze valida o campo <code>source</code> esperado.
+    </p>
+  </header>
+
+  <aside class="cenarios__prereqs" aria-labelledby="cenarios-prereqs-title">
+    <h2 id="cenarios-prereqs-title" class="cenarios__section-title">Pré-requisitos</h2>
+    <ul>
+      <li>API em <code>localhost:8000</code> (<code>npm run dev</code>)</li>
+      <li>Postgres + pgvector no ar (<code>docker compose -f docker/docker-compose.yml up -d</code>)</li>
+      <li><code>GEMINI_API_KEY</code> configurada no <code>.env</code></li>
+      <li>
+        Rode a sequência completa sem reiniciar a API (o cache exact é só em memória)
+      </li>
+      <li>
+        Idealmente tabela <code>ai_response_cache</code> vazia (ou sem itens
+        muito parecidos com “cancelar meu plano”); o passo 1 grava o seed semântico
+      </li>
+    </ul>
+  </aside>
+
+  <div class="cenarios__actions" role="group" aria-label="Controles do cenário">
+    <button
+      mat-flat-button
+      color="primary"
+      type="button"
+      (click)="runAll()"
+      [disabled]="!canRunAll()"
+    >
+      @if (running()) {
+        <ng-container>
+          <mat-spinner diameter="20"></mat-spinner>
+          Executando…
+        </ng-container>
+      } @else {
+        <ng-container>
+          <mat-icon>play_arrow</mat-icon>
+          Rodar tudo
+        </ng-container>
+      }
+    </button>
+    <button
+      mat-stroked-button
+      type="button"
+      (click)="runNext()"
+      [disabled]="!canRunNext()"
+    >
+      <mat-icon>skip_next</mat-icon>
+      Próximo passo
+    </button>
+    <button
+      mat-button
+      type="button"
+      (click)="reset()"
+      [disabled]="!canReset()"
+    >
+      <mat-icon>restart_alt</mat-icon>
+      Reiniciar
+    </button>
+  </div>
+
+  @if (runnerError()) {
+    <p class="cenarios__error" role="alert">{{ runnerError() }}</p>
+  }
+
+  @if (summary(); as sum) {
+    <p
+      class="cenarios__summary"
+      [class.cenarios__summary--done]="sum.allDone"
+      aria-live="polite"
+    >
+      @if (sum.allDone) {
+        Resumo final:
+      } @else {
+        Progresso:
+      }
+      <strong>{{ sum.passed }}</strong> pass /
+      <strong>{{ sum.failed }}</strong> fail
+      ({{ sum.passed + sum.failed }}/{{ sum.total }})
+    </p>
+  }
+
+  <ol class="cenarios__steps" aria-label="Passos do cenário">
+    @for (step of steps; track step.id; let i = $index) {
+      @let result = results()[i];
+      <li
+        class="cenarios__step"
+        [class.cenarios__step--passed]="result.status === 'passed'"
+        [class.cenarios__step--failed]="result.status === 'failed'"
+        [class.cenarios__step--running]="result.status === 'running'"
+      >
+        <div class="cenarios__step-head">
+          <mat-icon
+            class="cenarios__status-icon"
+            [attr.aria-label]="statusLabel(result.status)"
+          >
+            {{ statusIcon(result.status) }}
+          </mat-icon>
+          <div class="cenarios__step-titles">
+            <h3 class="cenarios__step-label">{{ step.label }}</h3>
+            <p class="cenarios__step-desc">{{ step.description }}</p>
+          </div>
+        </div>
+
+        <dl class="cenarios__step-meta">
+          @if (step.kind === 'analyze') {
+            <div>
+              <dt>Mensagem</dt>
+              <dd>“{{ step.message }}”</dd>
+            </div>
+          } @else {
+            <div>
+              <dt>Threshold</dt>
+              <dd>{{ step.threshold }}</dd>
+            </div>
+          }
+          <div>
+            <dt>Esperado</dt>
+            <dd>
+              <code>{{ expectedLabel(step) }}</code>
+            </dd>
+          </div>
+          @if (result.actualSource) {
+            <div>
+              <dt>Obtido</dt>
+              <dd>
+                <code>{{ result.actualSource }}</code>
+              </dd>
+            </div>
+          }
+          @if (result.elapsedMs != null) {
+            <div>
+              <dt>elapsed_ms</dt>
+              <dd>{{ result.elapsedMs }}</dd>
+            </div>
+          }
+        </dl>
+
+        @if (result.errorMessage) {
+          <p class="cenarios__error" role="alert">{{ result.errorMessage }}</p>
+        }
+      </li>
+    }
+  </ol>
+</section>

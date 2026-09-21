@@ -1,0 +1,24 @@
+<ol class="timeline" aria-label="Cascata de cache">
+  @for (stage of stages(); track stage.id; let last = $last) {
+    <li
+      class="timeline__stage"
+      [class.timeline__stage--answer]="stage.role === 'answer'"
+      [class.timeline__stage--miss]="stage.role === 'miss'"
+      [class.timeline__stage--skipped]="stage.role === 'skipped'"
+    >
+      <div class="timeline__marker" aria-hidden="true">
+        <mat-icon>{{ stageIcon(stage.role) }}</mat-icon>
+        @if (!last) {
+          <span class="timeline__connector"></span>
+        }
+      </div>
+      <div class="timeline__body">
+        <div class="timeline__header">
+          <span class="timeline__label">{{ stage.label }}</span>
+          <span class="timeline__badge">{{ stageRoleLabel(stage.role) }}</span>
+        </div>
+        <p class="timeline__detail">{{ stage.detail }}</p>
+      </div>
+    </li>
+  }
+</ol>

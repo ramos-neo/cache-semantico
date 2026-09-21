@@ -1,0 +1,130 @@
+<section class="obs" aria-labelledby="obs-title">
+  <header class="obs__header">
+    <h1 id="obs-title">Observabilidade</h1>
+    <p class="obs__lead">
+      Histórico local das análises: quantos hits exact, semantic e AI, com latência.
+    </p>
+    <p class="obs__notice" role="note">
+      Dados ficam só neste browser (localStorage), para estudo. Não sincronizam
+      com o servidor nem com outros dispositivos. Mensagens de ticket podem
+      conter informação sensível — limpe o histórico quando terminar.
+    </p>
+  </header>
+
+  <section class="obs__agg" aria-labelledby="obs-agg-title">
+    <div class="obs__agg-head">
+      <h2 id="obs-agg-title" class="obs__section-title">Por origem</h2>
+      <button
+        mat-stroked-button
+        type="button"
+        color="warn"
+        (click)="clearHistory()"
+        [disabled]="isEmpty()"
+      >
+        <mat-icon>delete_outline</mat-icon>
+        Limpar histórico
+      </button>
+    </div>
+
+    <ul class="obs__chips" aria-label="Contagem por source">
+      <li class="obs__chip obs__chip--exact">
+        <span class="obs__chip-label">exact_cache</span>
+        <span class="obs__chip-value">{{ counts().exact_cache }}</span>
+      </li>
+      <li class="obs__chip obs__chip--semantic">
+        <span class="obs__chip-label">semantic_cache</span>
+        <span class="obs__chip-value">{{ counts().semantic_cache }}</span>
+      </li>
+      <li class="obs__chip obs__chip--ai">
+        <span class="obs__chip-label">ai_model</span>
+        <span class="obs__chip-value">{{ counts().ai_model }}</span>
+      </li>
+      @if (counts().other > 0) {
+        <li class="obs__chip obs__chip--other">
+          <span class="obs__chip-label">outro</span>
+          <span class="obs__chip-value">{{ counts().other }}</span>
+        </li>
+      }
+      <li class="obs__chip obs__chip--total">
+        <span class="obs__chip-label">total</span>
+        <span class="obs__chip-value">{{ counts().total }}</span>
+      </li>
+    </ul>
+  </section>
+
+  <section class="obs__list-section" aria-labelledby="obs-list-title">
+    <h2 id="obs-list-title" class="obs__section-title">Histórico</h2>
+
+    @if (isEmpty()) {
+      <p class="obs__empty">
+        Nenhuma análise registrada ainda. Use o Lab ou os Cenários para alimentar
+        o histórico.
+      </p>
+    } @else {
+      <ul class="obs__list" role="list">
+        @for (entry of entries(); track entry.id) {
+          <li class="obs__item" [class.obs__item--selected]="selectedId() === entry.id">
+            <button
+              type="button"
+              class="obs__item-btn"
+              (click)="select(entry)"
+              [attr.aria-expanded]="selectedId() === entry.id"
+            >
+              <span class="obs__item-meta">
+                <time [attr.datetime]="entry.timestamp">
+                  {{ entry.timestamp | date: 'dd/MM/yyyy HH:mm:ss' }}
+                </time>
+                <span [class]="'obs__source ' + sourceClass(entry.source)">
+                  {{ entry.source }}
+                </span>
+                <span class="obs__elapsed">{{ entry.elapsed_ms }} ms</span>
+              </span>
+              <span class="obs__item-msg">{{ messagePreview(entry.message) }}</span>
+            </button>
+
+            @if (selectedId() === entry.id && selected(); as detail) {
+              <div class="obs__detail" aria-label="Detalhe da entrada">
+                <dl class="obs__detail-grid">
+                  <div>
+                    <dt>source</dt>
+                    <dd>{{ detail.source }}</dd>
+                  </div>
+                  <div>
+                    <dt>elapsed_ms</dt>
+                    <dd>{{ detail.elapsed_ms }}</dd>
+                  </div>
+                  <div>
+                    <dt>ai_call_number</dt>
+                    <dd>{{ detail.ai_call_number }}</dd>
+                  </div>
+                  @if (detail.category) {
+                    <div>
+                      <dt>categoria</dt>
+                      <dd>{{ detail.category }}</dd>
+                    </div>
+                  }
+                  @if (detail.confidence !== undefined) {
+                    <div>
+                      <dt>confiança</dt>
+                      <dd>{{ (detail.confidence * 100).toFixed(0) }}%</dd>
+                    </div>
+                  }
+                </dl>
+                <p class="obs__detail-msg">
+                  <strong>Mensagem</strong>
+                  {{ detail.message }}
+                </p>
+                @if (detail.reason) {
+                  <p class="obs__detail-reason">
+                    <strong>Motivo</strong>
+                    {{ detail.reason }}
+                  </p>
+                }
+              </div>
+            }
+          </li>
+        }
+      </ul>
+    }
+  </section>
+</section>

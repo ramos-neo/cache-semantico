@@ -1,4 +1,5 @@
 import { serve } from "@hono/node-server";
+
 import { app } from "./app.js";
 import { initDb } from "./db/index.js";
 import { logBlock } from "./log.js";

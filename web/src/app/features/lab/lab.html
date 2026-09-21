@@ -1,0 +1,145 @@
+<section class="lab" aria-labelledby="lab-title">
+  <header class="lab__header">
+    <h1 id="lab-title">Lab</h1>
+    <p class="lab__lead">
+      Envie um ticket e veja qual etapa da cascata respondeu: exact → semantic → AI.
+    </p>
+    <p class="lab__hint">
+      O cache exact vive só em memória: reiniciar a API limpa os hits exact.
+    </p>
+  </header>
+
+  <aside class="lab__config" aria-labelledby="lab-config-title">
+    <h2 id="lab-config-title" class="lab__section-title">Threshold semântico</h2>
+    @if (configLoaded()) {
+      <p class="lab__config-current">
+        Atual na API:
+        <strong>{{ threshold() }}</strong>
+      </p>
+    } @else if (configError()) {
+      <p class="lab__error" role="alert">{{ configError() }}</p>
+      <button mat-stroked-button type="button" (click)="loadConfig()">
+        Tentar de novo
+      </button>
+    } @else {
+      <p class="lab__muted">Carregando config…</p>
+    }
+
+    @if (configLoaded()) {
+      <div class="lab__config-form">
+        <mat-form-field appearance="outline" class="lab__threshold-field">
+          <mat-label>Novo threshold (0–1]</mat-label>
+          <input
+            matInput
+            type="text"
+            inputmode="decimal"
+            [ngModel]="thresholdDraft()"
+            (ngModelChange)="thresholdDraft.set($event)"
+            [disabled]="configSaving()"
+          />
+        </mat-form-field>
+        <button
+          mat-flat-button
+          color="primary"
+          type="button"
+          (click)="saveThreshold()"
+          [disabled]="configSaving()"
+        >
+          @if (configSaving()) {
+            Salvando…
+          } @else {
+            Aplicar
+          }
+        </button>
+      </div>
+      @if (configError()) {
+        <p class="lab__error" role="alert">{{ configError() }}</p>
+      }
+    }
+  </aside>
+
+  <form class="lab__form" (ngSubmit)="submit()" aria-labelledby="lab-form-title">
+    <h2 id="lab-form-title" class="lab__section-title">Mensagem do ticket</h2>
+    <mat-form-field appearance="outline" class="lab__message-field">
+      <mat-label>Mensagem</mat-label>
+      <textarea
+        matInput
+        rows="4"
+        [ngModel]="message()"
+        (ngModelChange)="message.set($event)"
+        name="message"
+        [disabled]="viewState() === 'loading'"
+        placeholder="Ex.: Quero cancelar meu plano"
+      ></textarea>
+    </mat-form-field>
+
+    <div class="lab__actions">
+      <button
+        mat-flat-button
+        color="primary"
+        type="submit"
+        [disabled]="viewState() === 'loading'"
+      >
+        @if (viewState() === 'loading') {
+          <ng-container>
+            <mat-spinner diameter="20"></mat-spinner>
+            Analisando…
+          </ng-container>
+        } @else {
+          <ng-container>
+            <mat-icon>send</mat-icon>
+            Analisar
+          </ng-container>
+        }
+      </button>
+    </div>
+  </form>
+
+  @if (viewState() === 'validation' || viewState() === 'error') {
+    <p class="lab__error" role="alert">{{ errorMessage() }}</p>
+  }
+
+  @if (viewState() === 'loading') {
+    <p class="lab__muted" aria-live="polite">Chamando POST /tickets/analyze…</p>
+  }
+
+  @if (viewState() === 'success' && response(); as res) {
+    <section class="lab__result" aria-labelledby="lab-result-title">
+      <h2 id="lab-result-title" class="lab__section-title">Resultado</h2>
+      <dl class="lab__result-grid">
+        <div>
+          <dt>Categoria</dt>
+          <dd>{{ categoryLabel(res.result.category) }}</dd>
+        </div>
+        <div>
+          <dt>Confiança</dt>
+          <dd>{{ confidencePercent(res.result.confidence) }}</dd>
+        </div>
+        <div class="lab__result-reason">
+          <dt>Motivo</dt>
+          <dd>{{ res.result.reason }}</dd>
+        </div>
+      </dl>
+
+      <div class="lab__telemetry" aria-label="Telemetria da requisição">
+        <span>
+          <strong>source:</strong>
+          {{ res.source }}
+        </span>
+        <span>
+          <strong>elapsed_ms:</strong>
+          {{ res.elapsed_ms }}
+        </span>
+        <span>
+          <strong>ai_call_number:</strong>
+          {{ res.ai_call_number }}
+        </span>
+      </div>
+    </section>
+
+    <section class="lab__timeline" aria-labelledby="lab-timeline-title">
+      <h2 id="lab-timeline-title" class="lab__section-title">Cascata</h2>
+      <app-cascade-timeline [response]="res" />
+    </section>
+  }
+</section>

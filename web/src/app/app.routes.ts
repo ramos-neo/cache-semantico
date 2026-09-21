@@ -10,41 +10,24 @@ export const routes: Routes = [
       {
         path: 'lab',
         loadComponent: () =>
-          import('./features/placeholder/placeholder').then((m) => m.Placeholder),
-        data: {
-          title: 'Lab',
-          description:
-            'Laboratório interativo do cache semântico — em construção.',
-        },
+          import('./features/lab/lab').then((m) => m.Lab),
       },
       {
         path: 'cenarios',
         loadComponent: () =>
-          import('./features/placeholder/placeholder').then((m) => m.Placeholder),
-        data: {
-          title: 'Cenários',
-          description: 'Cenários didáticos de hit/miss e fingerprint — em construção.',
-        },
+          import('./features/cenarios/cenarios').then((m) => m.Cenarios),
       },
       {
         path: 'observabilidade',
         loadComponent: () =>
-          import('./features/placeholder/placeholder').then((m) => m.Placeholder),
-        data: {
-          title: 'Observabilidade',
-          description:
-            'Telemetria de source, cache e latência — em construção.',
-        },
+          import('./features/observabilidade/observabilidade').then(
+            (m) => m.Observabilidade,
+          ),
       },
       {
         path: 'arquitetura',
         loadComponent: () =>
-          import('./features/placeholder/placeholder').then((m) => m.Placeholder),
-        data: {
-          title: 'Arquitetura',
-          description:
-            'Visão da cascata exact → semantic → AI — em construção.',
-        },
+          import('./features/arquitetura/arquitetura').then((m) => m.Arquitetura),
       },
     ],
   },

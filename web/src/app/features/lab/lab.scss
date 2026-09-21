@@ -1,0 +1,123 @@
+.lab {
+  max-width: 44rem;
+  padding: 0.5rem 0 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+}
+
+.lab__header {
+  h1 {
+    margin: 0 0 0.5rem;
+    font: var(--mat-sys-headline-medium);
+    color: var(--mat-sys-on-surface);
+  }
+}
+
+.lab__lead {
+  margin: 0 0 0.5rem;
+  font: var(--mat-sys-body-large);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.lab__hint {
+  margin: 0;
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+  opacity: 0.9;
+}
+
+.lab__section-title {
+  margin: 0 0 0.75rem;
+  font: var(--mat-sys-title-medium);
+  color: var(--mat-sys-on-surface);
+}
+
+.lab__config,
+.lab__form,
+.lab__result,
+.lab__timeline {
+  padding: 0;
+}
+
+.lab__config-current {
+  margin: 0 0 0.75rem;
+  font: var(--mat-sys-body-medium);
+}
+
+.lab__config-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.lab__threshold-field {
+  width: 12rem;
+}
+
+.lab__message-field {
+  width: 100%;
+}
+
+.lab__actions {
+  display: flex;
+  gap: 0.75rem;
+
+  button mat-icon,
+  button mat-spinner {
+    margin-right: 0.35rem;
+  }
+
+  button {
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+.lab__error {
+  margin: 0;
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-error);
+}
+
+.lab__muted {
+  margin: 0;
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.lab__result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.75rem 1.25rem;
+  margin: 0 0 1rem;
+
+  dt {
+    margin: 0;
+    font: var(--mat-sys-label-medium);
+    color: var(--mat-sys-on-surface-variant);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  dd {
+    margin: 0.2rem 0 0;
+    font: var(--mat-sys-body-large);
+    color: var(--mat-sys-on-surface);
+  }
+}
+
+.lab__result-reason {
+  grid-column: 1 / -1;
+}
+
+.lab__telemetry {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+}
